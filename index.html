@@ -28,6 +28,8 @@ body{font-family:'Nunito',system-ui,sans-serif;margin:0;}
 .lav-press{transition:transform .12s ease;} .lav-press:active{transform:scale(.95);}
 .lav-progress{transition:width .5s cubic-bezier(.4,0,.2,1);}
 .lav-pop{animation:lavPop .35s ease;} @keyframes lavPop{0%{transform:scale(.9);opacity:.4}100%{transform:scale(1);opacity:1}}
+.lav-float-btn{opacity:.16;animation:lavFloat2 5s ease-in-out infinite;} .lav-float-btn:active{opacity:.5;}
+@keyframes lavFloat2{0%,100%{transform:translateY(3px)}50%{transform:translateY(-7px)}}
 </style>
 </head>
 <body class="lav-bg">
@@ -132,6 +134,7 @@ function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(
 function App(){
   const [estado, setEstado] = useState("cargando"); // cargando | ok | error
   const [tab, setTab] = useState("inicio");
+  const [licOpen,setLicOpen]=useState(false);
   const [orders, setOrders] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
@@ -242,6 +245,7 @@ function App(){
             <div className="bg-white/20 p-2 rounded-2xl backdrop-blur"><Ic p={P.drop} size={24}/></div>
             <div className="flex-1 min-w-0"><h1 className="font-extrabold text-xl leading-tight truncate">{cfg.negocio}</h1><p className="text-cyan-50 text-xs font-semibold">Lavado de vehículos · sincronizado</p></div>
           </button>
+          <button onClick={()=>setLicOpen(true)} aria-hidden="true" tabIndex={-1} className="lav-float-btn absolute right-2 bottom-1 w-7 h-7 rounded-full bg-white/40"></button>
         </div>
       </header>
       {tab!=="inicio" && <nav className="bg-white/80 backdrop-blur border-b border-blue-100 sticky top-[68px] z-10">
@@ -262,6 +266,7 @@ function App(){
         {tab==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} />}
       </main>
       <div className="h-8" />
+      {licOpen && <LicenciaModal cfg={cfg} updateCfg={updateCfg} onClose={()=>setLicOpen(false)} />}
     </div>
   );
 }
@@ -295,19 +300,7 @@ function Inicio({ setTab, cfg, orders, totalOrden }){
         <p className="text-xs font-semibold text-white/80">{it.s}</p>
       </button>))}
     </div>
-    <InstallButton/>
   </div>);
-}
-
-function InstallButton(){
-  const [prompt,setPrompt]=useState(null); const [hint,setHint]=useState(false); const [installed,setInstalled]=useState(false);
-  useEffect(()=>{ const h=(e)=>{e.preventDefault();setPrompt(e);}; const d=()=>setInstalled(true);
-    window.addEventListener('beforeinstallprompt',h); window.addEventListener('appinstalled',d);
-    return ()=>{ window.removeEventListener('beforeinstallprompt',h); window.removeEventListener('appinstalled',d); }; },[]);
-  const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
-  if(installed || standalone) return null;
-  const click=async()=>{ if(prompt){ prompt.prompt(); await prompt.userChoice; setPrompt(null); } else setHint(v=>!v); };
-  return (<div><button onClick={click} className="lav-press w-full bg-white border-2 border-blue-100 text-blue-600 font-extrabold py-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm"><Ic p={P.drop} size={18}/> Instalar aplicación</button>{hint&&<p className="text-xs text-slate-400 font-semibold mt-2 text-center">En iPhone: toca <b>Compartir</b> → <b>Agregar a inicio</b>. En PC/Android: usa el ícono de instalar en la barra de direcciones.</p>}</div>);
 }
 
 /* ====== RECEPCIÓN ====== */
@@ -488,7 +481,6 @@ function Ajustes({ cfg, updateCfg }){
     <Sec title="Precios base (Auto/Sedán)"><p className="text-xs text-slate-400 mb-3 font-semibold">Los demás tamaños se calculan solos.</p><div className="space-y-2">{cfg.servicios.map(s=>(<div key={s.id} className="flex items-center gap-2"><span className="flex-1 text-sm font-semibold text-slate-600">{s.nombre}</span><span className="text-slate-400 text-sm font-bold">$</span><input type="number" value={s.base} className="w-20 rounded-xl border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-right outline-none focus:border-blue-500" onChange={e=>updateCfg({servicios:cfg.servicios.map(x=>x.id===s.id?{...x,base:Number(e.target.value)||0}:x)})}/></div>))}</div></Sec>
     <Sec title="Lavadores"><ListEditor items={cfg.lavadores} upd={(v)=>updateCfg({lavadores:v})} ph="Nombre del lavador" val={nl} setVal={setNl}/></Sec>
     <Sec title="Bahías"><ListEditor items={cfg.bahias} upd={(v)=>updateCfg({bahias:v})} ph="Ej: Bahía 4" val={nb} setVal={setNb}/></Sec>
-    <LicenciaAdmin cfg={cfg} updateCfg={updateCfg} />
   </div>);
 }
 
@@ -522,7 +514,7 @@ function Bloqueo({cfg,updateCfg}){
   </div>);
 }
 
-function LicenciaAdmin({cfg,updateCfg}){
+function LicenciaModal({cfg,updateCfg,onClose}){
   const lic=cfg.licencia||{};
   const [open,setOpen]=useState(false); const [pin,setPin]=useState(""); const [msg,setMsg]=useState("");
   const venc=lic.vencimiento||0; const dias=lic.dias||15;
@@ -531,11 +523,12 @@ function LicenciaAdmin({cfg,updateCfg}){
   const entrar=()=>{ if(pin===String(lic.pin||"")){ setOpen(true); setMsg(""); } else setMsg("PIN incorrecto."); };
   const setLic=(patch)=>updateCfg({licencia:{...lic,...patch}});
   const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500";
-  return (<section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
-    <h2 className="font-extrabold mb-1 text-slate-700 flex items-center gap-2"><span className="bg-gradient-to-br from-cyan-400 to-blue-500 text-white p-1.5 rounded-lg"><Ic p={P.wallet} size={16}/></span> Licencia / suscripción</h2>
-    <p className="text-xs text-slate-400 font-semibold mb-3">Solo el proveedor. Vence: <b>{fecha}</b> ({rest>=0?`quedan ${rest} días`:"vencida"}).</p>
-    {!open?(<div><div className="flex gap-2"><input value={pin} onChange={e=>setPin(e.target.value)} inputMode="numeric" placeholder="PIN del proveedor" className={inp}/><button onClick={entrar} className="lav-press bg-blue-600 text-white px-4 rounded-xl font-extrabold">Abrir</button></div>{msg&&<p className="text-xs font-bold text-rose-500 mt-1">{msg}</p>}</div>):(
+  return (<div className="fixed inset-0 z-50 bg-slate-900/40 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+    <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm p-5 lav-pop" onClick={e=>e.stopPropagation()}>
+      <div className="flex items-center justify-between mb-3"><h2 className="font-extrabold text-slate-700">Licencia (proveedor)</h2><button onClick={onClose} className="lav-press text-slate-300 hover:text-slate-500"><Ic p={P.x} size={20}/></button></div>
+      {!open?(<div><p className="text-xs text-slate-400 font-semibold mb-2">Ingresa el PIN para administrar la licencia.</p><input value={pin} onChange={e=>setPin(e.target.value)} inputMode="numeric" placeholder="PIN" className={inp+" text-center text-lg"} autoFocus/>{msg&&<p className="text-xs font-bold text-rose-500 mt-1">{msg}</p>}<button onClick={entrar} className="lav-press mt-3 w-full bg-blue-600 text-white font-extrabold py-2.5 rounded-xl">Ingresar</button></div>):(
       <div className="space-y-3 lav-pop">
+        <p className="text-xs text-slate-400 font-semibold">Vence: <b>{fecha}</b> ({rest>=0?`quedan ${rest} días`:"vencida"}).</p>
         <label className="block"><span className="text-xs font-bold text-slate-400">Duración por defecto (días)</span><input type="number" value={dias} onChange={e=>setLic({dias:Number(e.target.value)||0})} className={inp+" mt-1"}/></label>
         <div className="grid grid-cols-2 gap-2">
           <button onClick={()=>setLic({vencimiento:Date.now()+(dias||15)*86400000})} className="lav-press bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-2.5 rounded-xl text-sm">Renovar +{dias} días</button>
@@ -550,7 +543,8 @@ function LicenciaAdmin({cfg,updateCfg}){
         <button onClick={()=>setLic({vencimiento:Date.now()-1000})} className="lav-press w-full border-2 border-rose-200 text-rose-500 font-extrabold py-2.5 rounded-xl text-sm">Suspender ahora (probar bloqueo)</button>
       </div>
     )}
-  </section>);
+    </div>
+  </div>);
 }
 
 /* ====== VARIOS ====== */
