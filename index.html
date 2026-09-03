@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Lavado de Vehículos</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Lavadora" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+body{font-family:'Nunito',system-ui,sans-serif;margin:0;}
+.lav-bg{background:linear-gradient(180deg,#eaf6ff 0%,#f1f9ff 40%,#eef2f7 100%);}
+.lav-header{background:linear-gradient(120deg,#22d3ee 0%,#3b82f6 55%,#2563eb 100%);}
+.lav-bubble{position:absolute;bottom:-10px;border-radius:9999px;background:rgba(255,255,255,.35);animation:lavFloat 6s linear infinite;}
+@keyframes lavFloat{0%{transform:translateY(0);opacity:0}15%{opacity:.7}100%{transform:translateY(-90px) scale(1.4);opacity:0}}
+.lav-cta{animation:lavCta 1.5s ease-in-out infinite;}
+@keyframes lavCta{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+.lav-press{transition:transform .12s ease;} .lav-press:active{transform:scale(.95);}
+.lav-progress{transition:width .5s cubic-bezier(.4,0,.2,1);}
+.lav-pop{animation:lavPop .35s ease;} @keyframes lavPop{0%{transform:scale(.9);opacity:.4}100%{transform:scale(1);opacity:1}}
+</style>
+</head>
+<body class="lav-bg">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+/* ====== CONEXIÓN A TU BASE DE DATOS ====== */
+const SUPABASE_URL = "https://vkjezlbxfkypqitgcpjs.supabase.co";
+const SUPABASE_KEY = "sb_publishable_GDusu14Tybf4g2T7oGB6tA_MjYbk_uo";
+const SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ====== ÍCONOS (SVG) ====== */
+const P = {
+  car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+  bike:'<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>',
+  truck:'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  clip:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+  grid:'<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  wallet:'<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  gear:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  msg:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  right:'<path d="m9 18 6-6-6-6"/>',
+  left:'<path d="m15 18-6-6 6-6"/>',
+  trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  drop:'<path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 4.24 7 2c-.29 2.24-1.14 4.13-2.29 5.06S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A11 11 0 0 0 14 3c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a5 5 0 0 1-10 0c0-1.3.5-2.5 1.5-3.5"/>',
+  dollar:'<line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  spark:'<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
+  ok:'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  star:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  gift:'<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 5.5 12 8c0-2.5 2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+};
+function Ic({p, size=18, className, style, fill="none"}) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" className={className} style={style} dangerouslySetInnerHTML={{__html:p}} />;
+}
+
+/* ====== DATOS BASE ====== */
+const TIPOS = [
+  { id:"moto", label:"Moto", mult:0.6, pth:P.bike, tint:"bg-teal-100 text-teal-600" },
+  { id:"auto", label:"Auto / Sedán", mult:1, pth:P.car, tint:"bg-blue-100 text-blue-600" },
+  { id:"suv", label:"SUV", mult:1.3, pth:P.car, tint:"bg-indigo-100 text-indigo-600" },
+  { id:"camioneta", label:"Camioneta", mult:1.5, pth:P.truck, tint:"bg-cyan-100 text-cyan-600" },
+  { id:"camion", label:"Camión", mult:2, pth:P.truck, tint:"bg-sky-100 text-sky-700" },
+];
+const SERVICIOS_SEED = [
+  { id:"express", nombre:"Lavado express (exterior)", base:5 },
+  { id:"completo", nombre:"Lavado completo", base:12 },
+  { id:"faros", nombre:"Pulido de faros", base:15 },
+  { id:"encerado", nombre:"Encerado", base:10 },
+  { id:"ac", nombre:"Desinfección ductos A/C", base:20 },
+  { id:"tapiceria", nombre:"Limpieza tapicería (extractor)", base:25 },
+  { id:"combo1", nombre:"Combo: Completo + grafito chasis", base:18 },
+];
+const CLIENTES_SEED = [
+  { id:"p1", nombre:"Luis Andrade", whatsapp:"0987654321", visitas:12 },
+  { id:"p2", nombre:"Ana Torres", whatsapp:"0991234567", visitas:7 },
+  { id:"p3", nombre:"Jorge Ruiz", whatsapp:"0993344556", visitas:5 },
+  { id:"p4", nombre:"María Gómez", whatsapp:"0961122334", visitas:3 },
+  { id:"p5", nombre:"Sofía Vera", whatsapp:"0958899001", visitas:1 },
+];
+const VEHICULOS_SEED = [
+  { id:"v1", placa:"IBB-4590", tipo:"camioneta", marca:"Toyota Hilux", color:"Blanco", cliente_id:"p1" },
+  { id:"v2", placa:"IBB-0099", tipo:"moto", marca:"Yamaha MT-03", color:"Negro", cliente_id:"p1" },
+  { id:"v3", placa:"PXA-1234", tipo:"auto", marca:"Chevrolet Sail", color:"Plateado", cliente_id:"p2" },
+  { id:"v4", placa:"GHT-7788", tipo:"moto", marca:"Yamaha FZ", color:"Azul", cliente_id:"p3" },
+  { id:"v5", placa:"PCM-0821", tipo:"suv", marca:"Kia Sportage", color:"Negro", cliente_id:"p4" },
+  { id:"v6", placa:"OBA-1102", tipo:"auto", marca:"Hyundai Accent", color:"Rojo", cliente_id:"p5" },
+];
+const CHECK_ITEMS = ["Rayones","Abolladuras","Vidrios fisurados","Retrovisores","Llanta de emergencia","Tapizado manchado"];
+const ESTADOS = [
+  { id:"espera", label:"En espera" },{ id:"proceso", label:"En proceso" },{ id:"listo", label:"Listo para entregar" },
+];
+const EST = {
+  espera:{col:"bg-slate-50 border-slate-200",dot:"bg-slate-400",head:"text-slate-500",fill:"#94a3b8"},
+  proceso:{col:"bg-sky-50 border-sky-200",dot:"bg-sky-500",head:"text-sky-600",fill:"#0ea5e9"},
+  listo:{col:"bg-emerald-50 border-emerald-200",dot:"bg-emerald-500",head:"text-emerald-600",fill:"#10b981"},
+  entregado:{col:"bg-zinc-50 border-zinc-200",dot:"bg-zinc-400",head:"text-zinc-400",fill:"#a1a1aa"},
+};
+const METODOS = ["Efectivo","Transferencia","Deuna","Tarjeta"];
+const META_LEALTAD = 5;
+
+/* ====== UTILIDADES ====== */
+const uid = () => Math.random().toString(36).slice(2,9);
+const money = (n) => "$" + (Number(n)||0).toFixed(2);
+const tipoOf = (id) => TIPOS.find(t=>t.id===id) || TIPOS[1];
+function waNumber(raw){ let n=(raw||"").replace(/\D/g,""); if(n.startsWith("593"))return n; if(n.startsWith("0"))return "593"+n.slice(1); if(n.length===9)return "593"+n; return n; }
+const precioServicio = (s,mult) => Math.round(s.base*mult);
+const premioListo = (v) => v>0 && v%META_LEALTAD===0;
+const vehFromDb = (r) => ({ id:r.id, placa:r.placa, tipo:r.tipo, marca:r.marca, color:r.color, clienteId:r.cliente_id });
+const vehToDb = (v) => ({ id:v.id, placa:v.placa, tipo:v.tipo, marca:v.marca, color:v.color, cliente_id:v.clienteId });
+function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+
+/* ====== APP ====== */
+function App(){
+  const [estado, setEstado] = useState("cargando"); // cargando | ok | error
+  const [tab, setTab] = useState("inicio");
+  const [orders, setOrders] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [vehiculos, setVehiculos] = useState([]);
+  const [cfg, setCfg] = useState({ negocio:"Mi Lavadora", comisionPct:30, lavadores:["Carlos","Luis","Marco"], bahias:["Bahía 1","Bahía 2","Bahía 3"], servicios:SERVICIOS_SEED, turno:{abierto:false,apertura:0,hora:null}, licencia:{} });
+
+  const reloadAll = async () => {
+    const [c,v,o,cf] = await Promise.all([
+      SB.from("clientes").select("*"),
+      SB.from("vehiculos").select("*"),
+      SB.from("orders").select("*").order("fecha",{ascending:false}),
+      SB.from("config").select("*").eq("id",1).single(),
+    ]);
+    setClientes(c.data||[]);
+    setVehiculos((v.data||[]).map(vehFromDb));
+    const norm=(x)=>({...x, estado:["lavando","secado","detallado"].includes(x.estado)?"proceso":x.estado});
+    setOrders((o.data||[]).map(norm));
+    if(cf.data) setCfg({ negocio:cf.data.negocio||"Mi Lavadora", comisionPct:cf.data.comision_pct??30,
+      lavadores:cf.data.lavadores||["Carlos","Luis","Marco"], bahias:cf.data.bahias||["Bahía 1","Bahía 2","Bahía 3"],
+      servicios:cf.data.servicios||SERVICIOS_SEED, turno:cf.data.turno||{abierto:false,apertura:0,hora:null}, licencia:cf.data.licencia||{} });
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // sembrar datos de ejemplo si está vacío
+        const { count } = await SB.from("clientes").select("*",{count:"exact",head:true});
+        if((count||0)===0){
+          await SB.from("clientes").insert(CLIENTES_SEED);
+          await SB.from("vehiculos").insert(VEHICULOS_SEED);
+        }
+        // asegurar servicios en config
+        const cf = await SB.from("config").select("servicios").eq("id",1).single();
+        if(cf.data && !cf.data.servicios){ await SB.from("config").update({servicios:SERVICIOS_SEED}).eq("id",1); }
+        // asegurar licencia (arranca en 15 días)
+        const lc = await SB.from("config").select("licencia").eq("id",1).single();
+        if(!lc.data || !lc.data.licencia || !lc.data.licencia.vencimiento){
+          const lic = { vencimiento: Date.now()+15*86400000, pin:"1234", dias:15, contacto:{nombre:"",whatsapp:""} };
+          await SB.from("config").update({licencia:lic}).eq("id",1);
+        }
+        await reloadAll();
+        setEstado("ok");
+      } catch(e){ console.error(e); setEstado("error"); }
+    })();
+    const recargar = debounce(()=>reloadAll(), 350);
+    const ch = SB.channel("rt").on("postgres_changes",{event:"*",schema:"public"}, recargar).subscribe();
+    return () => { SB.removeChannel(ch); };
+  }, []);
+
+  const saveCfg = useRef(debounce(async (row) => {
+    await SB.from("config").update({ negocio:row.negocio, comision_pct:row.comisionPct, lavadores:row.lavadores,
+      bahias:row.bahias, servicios:row.servicios, turno:row.turno, licencia:row.licencia }).eq("id",1);
+  }, 500)).current;
+  const updateCfg = (patch) => setCfg(prev => { const next={...prev,...patch}; saveCfg(next); return next; });
+
+  const tipoMult = (tid) => tipoOf(tid).mult;
+  const totalOrden = (o) => (o.servicios||[]).reduce((a,sid)=>{ const s=cfg.servicios.find(x=>x.id===sid); return a+(s?precioServicio(s,tipoMult(o.tipo)):0); },0);
+
+  const updOrder = (id,patch) => { setOrders(p=>p.map(o=>o.id===id?{...o,...patch}:o)); SB.from("orders").update(patch).eq("id",id); };
+  const delOrder = (id) => { setOrders(p=>p.filter(o=>o.id!==id)); SB.from("orders").delete().eq("id",id); };
+
+  const ingresar = (o) => {
+    const placa=o.placa.toUpperCase().trim(), phone=(o.whatsapp||"").trim(), name=(o.cliente||"").trim();
+    const order={ id:uid(), placa, tipo:o.tipo, marca:o.marca, color:o.color, cliente:name, whatsapp:phone,
+      servicios:o.servicios, bahia:o.bahia, lavador:o.lavador, estado:"espera", danos:o.danos, objetos:o.objetos,
+      notas:o.notas, pago:{metodo:"Efectivo",monto:0,pagado:false}, fecha:Date.now() };
+    setOrders(p=>[order,...p]); SB.from("orders").insert(order);
+
+    let persona = (phone && clientes.find(c=>waNumber(c.whatsapp)&&waNumber(c.whatsapp)===waNumber(phone)))
+      || (name && clientes.find(c=>c.nombre.trim().toLowerCase()===name.toLowerCase()));
+    let clienteId;
+    if(persona){
+      clienteId=persona.id;
+      const upd={...persona, nombre:name||persona.nombre, whatsapp:phone||persona.whatsapp, visitas:(persona.visitas||0)+1, ultima:Date.now()};
+      setClientes(clientes.map(c=>c.id===persona.id?upd:c)); SB.from("clientes").upsert(upd);
+    } else {
+      clienteId=uid();
+      const nuevo={id:clienteId, nombre:name, whatsapp:phone, visitas:1, ultima:Date.now()};
+      setClientes([...clientes,nuevo]); SB.from("clientes").insert(nuevo);
+    }
+    const ex = vehiculos.find(v=>v.placa===placa);
+    const veh = ex ? {...ex, tipo:o.tipo, marca:o.marca||ex.marca, color:o.color||ex.color, clienteId}
+                   : {id:uid(), placa, tipo:o.tipo, marca:o.marca, color:o.color, clienteId};
+    setVehiculos(ex ? vehiculos.map(v=>v.id===ex.id?veh:v) : [...vehiculos,veh]);
+    SB.from("vehiculos").upsert(vehToDb(veh));
+    setTab("tablero");
+  };
+
+  if(estado==="cargando") return <Splash msg="Conectando con tu base de datos..." />;
+  if(estado==="error") return <Splash err msg="No se pudo conectar. Revisa el internet o las credenciales de Supabase." />;
+
+  const lic = cfg.licencia||{}; const venc = lic.vencimiento||0;
+  const diasRest = Math.ceil((venc-Date.now())/86400000);
+  const expirado = venc>0 && Date.now()>venc;
+  if(expirado) return <Bloqueo cfg={cfg} updateCfg={updateCfg} />;
+
+  const tabs=[
+    {id:"recepcion",label:"Recepción",p:P.clip},{id:"tablero",label:"Tablero",p:P.grid},
+    {id:"caja",label:"Caja",p:P.wallet},{id:"clientes",label:"Clientes",p:P.users},{id:"ajustes",label:"Ajustes",p:P.gear},
+  ];
+  const activos = orders.filter(o=>o.estado!=="entregado").length;
+
+  return (
+    <div className="min-h-screen text-slate-800">
+      <header className="lav-header text-white sticky top-0 z-20 shadow-lg overflow-hidden">
+        {[12,40,66,82,55].map((l,i)=>(<span key={i} className="lav-bubble" style={{left:l+"%",width:8+i*3,height:8+i*3,animationDelay:i*1.1+"s"}}/>))}
+        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center gap-3 relative">
+          <button onClick={()=>setTab("inicio")} className="flex items-center gap-3 flex-1 min-w-0 text-left lav-press">
+            <div className="bg-white/20 p-2 rounded-2xl backdrop-blur"><Ic p={P.drop} size={24}/></div>
+            <div className="flex-1 min-w-0"><h1 className="font-extrabold text-xl leading-tight truncate">{cfg.negocio}</h1><p className="text-cyan-50 text-xs font-semibold">Lavado de vehículos · sincronizado</p></div>
+          </button>
+        </div>
+      </header>
+      {tab!=="inicio" && <nav className="bg-white/80 backdrop-blur border-b border-blue-100 sticky top-[68px] z-10">
+        <div className="max-w-6xl mx-auto px-2 py-2 flex gap-1">
+          {tabs.map(t=>{ const on=tab===t.id;
+            return (<button key={t.id} onClick={()=>setTab(t.id)} className={"lav-press flex-1 flex flex-col items-center justify-center gap-1 py-2 px-0.5 rounded-xl text-[11px] sm:text-sm font-bold transition-colors "+(on?"bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow":"text-slate-500")}>
+              <Ic p={t.p} size={18}/><span className="flex items-center gap-1">{t.label}{t.id==="tablero"&&activos>0&&<span className={"text-[10px] rounded-full px-1 min-w-[16px] text-center "+(on?"bg-white/25":"bg-blue-600 text-white")}>{activos}</span>}</span>
+            </button>); })}
+        </div>
+      </nav>}
+      <main className="max-w-6xl mx-auto p-4">
+        {venc>0 && !expirado && diasRest<=5 && <Aviso dias={diasRest} lic={lic} negocio={cfg.negocio} />}
+        {tab==="inicio" && <Inicio setTab={setTab} cfg={cfg} orders={orders} totalOrden={totalOrden} />}
+        {tab==="recepcion" && <Recepcion cfg={cfg} clientes={clientes} vehiculos={vehiculos} tipoMult={tipoMult} onAdd={ingresar} />}
+        {tab==="tablero" && <Tablero orders={orders} totalOrden={totalOrden} cfg={cfg} onUpd={updOrder} onDel={delOrder} />}
+        {tab==="caja" && <Caja orders={orders} totalOrden={totalOrden} cfg={cfg} />}
+        {tab==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} cfg={cfg} />}
+        {tab==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} />}
+      </main>
+      <div className="h-8" />
+    </div>
+  );
+}
+
+/* ====== INICIO (PORTADA) ====== */
+function Inicio({ setTab, cfg, orders, totalOrden }){
+  const startToday=new Date(new Date().setHours(0,0,0,0)).getTime();
+  const hoy=orders.filter(o=>o.pago?.pagado && Number(o.fecha||0)>=startToday);
+  const totalHoy=hoy.reduce((a,o)=>a+totalOrden(o),0);
+  const activos=orders.filter(o=>o.estado!=="entregado").length;
+  const items=[
+    {id:"recepcion", p:P.clip, t:"Recepción", s:"Registrar ingreso", g:"from-cyan-500 to-blue-600"},
+    {id:"tablero", p:P.grid, t:"Tablero", s:"Estados en vivo", g:"from-sky-500 to-cyan-500"},
+    {id:"caja", p:P.wallet, t:"Caja", s:"Ingresos y comisiones", g:"from-blue-500 to-indigo-600"},
+    {id:"clientes", p:P.users, t:"Clientes", s:"Frecuentes y lealtad", g:"from-violet-500 to-purple-600"},
+    {id:"ajustes", p:P.gear, t:"Ajustes", s:"Precios, lavadores, licencia", g:"from-slate-500 to-slate-700"},
+  ];
+  return (<div className="space-y-4">
+    <div className="rounded-3xl p-6 bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg">
+      <p className="text-cyan-50 font-bold text-sm">Bienvenido a</p>
+      <h1 className="font-extrabold text-3xl leading-tight">{cfg.negocio}</h1>
+      <div className="flex gap-3 mt-4">
+        <div className="bg-white/15 rounded-2xl px-4 py-2 backdrop-blur"><p className="text-[11px] font-bold text-cyan-50">Hoy</p><p className="font-extrabold text-xl">{money(totalHoy)}</p></div>
+        <div className="bg-white/15 rounded-2xl px-4 py-2 backdrop-blur"><p className="text-[11px] font-bold text-cyan-50">Activos</p><p className="font-extrabold text-xl">{activos}</p></div>
+      </div>
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      {items.map(it=>(<button key={it.id} onClick={()=>setTab(it.id)} className={"lav-press text-left rounded-2xl p-4 text-white shadow-sm bg-gradient-to-br "+it.g+(it.id==="ajustes"?" col-span-2":"")}>
+        <span className="inline-flex bg-white/20 p-2.5 rounded-xl mb-2 backdrop-blur"><Ic p={it.p} size={24}/></span>
+        <p className="font-extrabold text-lg leading-tight">{it.t}</p>
+        <p className="text-xs font-semibold text-white/80">{it.s}</p>
+      </button>))}
+    </div>
+    <InstallButton/>
+  </div>);
+}
+
+function InstallButton(){
+  const [prompt,setPrompt]=useState(null); const [hint,setHint]=useState(false); const [installed,setInstalled]=useState(false);
+  useEffect(()=>{ const h=(e)=>{e.preventDefault();setPrompt(e);}; const d=()=>setInstalled(true);
+    window.addEventListener('beforeinstallprompt',h); window.addEventListener('appinstalled',d);
+    return ()=>{ window.removeEventListener('beforeinstallprompt',h); window.removeEventListener('appinstalled',d); }; },[]);
+  const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+  if(installed || standalone) return null;
+  const click=async()=>{ if(prompt){ prompt.prompt(); await prompt.userChoice; setPrompt(null); } else setHint(v=>!v); };
+  return (<div><button onClick={click} className="lav-press w-full bg-white border-2 border-blue-100 text-blue-600 font-extrabold py-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm"><Ic p={P.drop} size={18}/> Instalar aplicación</button>{hint&&<p className="text-xs text-slate-400 font-semibold mt-2 text-center">En iPhone: toca <b>Compartir</b> → <b>Agregar a inicio</b>. En PC/Android: usa el ícono de instalar en la barra de direcciones.</p>}</div>);
+}
+
+/* ====== RECEPCIÓN ====== */
+function Recepcion({ cfg, clientes, vehiculos, tipoMult, onAdd }){
+  const vacio={ placa:"",tipo:"auto",marca:"",color:"",cliente:"",whatsapp:"",servicios:[],bahia:cfg.bahias[0]||"",lavador:cfg.lavadores[0]||"",danos:[],objetos:"",notas:"" };
+  const [f,setF]=useState(vacio); const [err,setErr]=useState(""); const [openSug,setOpenSug]=useState(null);
+  const set=(k,v)=>{ setF(p=>({...p,[k]:v})); if(err)setErr(""); };
+  const mult=tipoMult(f.tipo);
+  const total=f.servicios.reduce((a,sid)=>{ const s=cfg.servicios.find(x=>x.id===sid); return a+(s?precioServicio(s,mult):0); },0);
+  const toggle=(arr,v)=>arr.includes(v)?arr.filter(x=>x!==v):[...arr,v];
+  const nombreDe=(id)=>clientes.find(c=>c.id===id)?.nombre||"";
+  const qp=f.placa.trim().toUpperCase(); const sugP=qp.length>=1?vehiculos.filter(v=>v.placa.includes(qp)).slice(0,5):[];
+  const qn=f.cliente.trim().toLowerCase(); const sugN=qn.length>=1?clientes.filter(c=>c.nombre.toLowerCase().includes(qn)).slice(0,5):[];
+  const elegirVehiculo=(v)=>{ const d=clientes.find(c=>c.id===v.clienteId); setF(p=>({...p,placa:v.placa,tipo:v.tipo,marca:v.marca||"",color:v.color||"",cliente:d?.nombre||"",whatsapp:d?.whatsapp||""})); setOpenSug(null); };
+  const elegirCliente=(c)=>{ setF(p=>({...p,cliente:c.nombre,whatsapp:c.whatsapp||""})); setOpenSug(null); };
+  const phoneN=waNumber(f.whatsapp);
+  const persona=(phoneN&&clientes.find(c=>waNumber(c.whatsapp)===phoneN))||(f.cliente.trim()&&clientes.find(c=>c.nombre.trim().toLowerCase()===f.cliente.trim().toLowerCase()));
+  const submit=()=>{ if(!f.placa.trim())return setErr("Ingresa la placa del vehículo."); if(f.servicios.length===0)return setErr("Selecciona al menos un servicio."); onAdd(f); setF(vacio); setErr(""); };
+  const inp="mt-1 w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold focus:border-blue-500 outline-none transition-colors";
+  const Field=({label,children})=>(<label className="block"><span className="text-xs font-bold text-slate-400">{label}</span>{children}</label>);
+  const Sec=({p,title,sub,children})=>(<section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold flex items-center gap-2 text-slate-700"><span className="bg-gradient-to-br from-cyan-400 to-blue-500 text-white p-1.5 rounded-lg"><Ic p={p} size={16}/></span>{title}</h2>{sub&&<p className="text-xs text-slate-400 mt-0.5 mb-3 font-semibold">{sub}</p>}<div className={sub?"":"mt-3"}>{children}</div></section>);
+  const Drop=({children})=>(<div className="absolute z-30 left-0 right-0 mt-1 bg-white rounded-xl border-2 border-blue-100 shadow-lg overflow-hidden">{children}</div>);
+
+  return (
+    <div className="space-y-4">
+      <Sec p={P.car} title="Datos del vehículo">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="relative">
+            <Field label="Placa"><input className={inp+" font-mono uppercase tracking-widest"} value={f.placa} onChange={e=>{set("placa",e.target.value);setOpenSug("placa");}} onFocus={()=>setOpenSug("placa")} onBlur={()=>setTimeout(()=>setOpenSug(null),150)} placeholder="PXA-1234" autoComplete="off"/></Field>
+            {openSug==="placa"&&sugP.length>0&&(<Drop>{sugP.map(v=>{ const T=tipoOf(v.tipo);
+              return (<button key={v.id} onMouseDown={e=>{e.preventDefault();elegirVehiculo(v);}} className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-blue-50"><span className={"p-1.5 rounded-lg "+T.tint}><Ic p={T.pth} size={15}/></span><span className="flex-1 min-w-0"><span className="font-mono font-bold text-sm text-slate-700 block">{v.placa}</span><span className="text-xs text-slate-400 font-semibold truncate block">{nombreDe(v.clienteId)} · {v.marca}</span></span></button>); })}</Drop>)}
+          </div>
+          <Field label="Color"><input className={inp} value={f.color} onChange={e=>set("color",e.target.value)} placeholder="Plateado"/></Field>
+          <div className="col-span-2"><Field label="Marca / Modelo"><input className={inp} value={f.marca} onChange={e=>set("marca",e.target.value)} placeholder="Chevrolet Sail"/></Field></div>
+        </div>
+        <span className="text-xs font-bold text-slate-400 block mt-3 mb-1.5">Tipo de vehículo</span>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">{TIPOS.map(t=>{ const on=f.tipo===t.id;
+          return (<button key={t.id} onClick={()=>set("tipo",t.id)} className={"lav-press flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-xs font-bold transition-all "+(on?"border-blue-500 bg-blue-50 text-blue-700 shadow-sm":"border-slate-100 text-slate-400")}><span className={"p-2 rounded-full "+(on?"bg-blue-500 text-white":t.tint)}><Ic p={t.pth} size={20}/></span><span className="text-center leading-tight">{t.label}</span></button>); })}</div>
+      </Sec>
+
+      <Sec p={P.user} title="Cliente" sub="La lealtad se acumula por persona (aunque tenga varios vehículos).">
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="relative">
+            <Field label="Nombre"><input className={inp} value={f.cliente} onChange={e=>{set("cliente",e.target.value);setOpenSug("nombre");}} onFocus={()=>setOpenSug("nombre")} onBlur={()=>setTimeout(()=>setOpenSug(null),150)} placeholder="Ana Torres" autoComplete="off"/></Field>
+            {openSug==="nombre"&&sugN.length>0&&(<Drop>{sugN.map(c=>{ const nv=vehiculos.filter(v=>v.clienteId===c.id).length;
+              return (<button key={c.id} onMouseDown={e=>{e.preventDefault();elegirCliente(c);}} className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-blue-50"><span className="bg-blue-100 text-blue-600 p-1.5 rounded-lg"><Ic p={P.user} size={15}/></span><span className="flex-1 min-w-0"><span className="font-bold text-sm text-slate-700 block truncate">{c.nombre}</span><span className="text-xs text-slate-400 font-semibold block">{c.visitas} visitas · {nv} vehículo{nv!==1?"s":""}</span></span>{c.visitas>=META_LEALTAD&&<Ic p={P.star} size={14} fill="#fbbf24" className="text-amber-400"/>}</button>); })}</Drop>)}
+          </div>
+          <Field label="WhatsApp"><input className={inp} value={f.whatsapp} onChange={e=>set("whatsapp",e.target.value)} placeholder="0991234567" inputMode="tel"/></Field>
+        </div>
+        {persona&&(<p className="text-xs font-bold text-blue-600 mt-2 flex items-center gap-1 bg-blue-50 rounded-lg px-2 py-1.5"><Ic p={P.ok} size={13}/> {persona.nombre} · {persona.visitas} visitas{persona.visitas>=META_LEALTAD&&" ⭐"}{premioListo(persona.visitas)&&" · 🎁 lavado gratis disponible"}</p>)}
+      </Sec>
+
+      <Sec p={P.spark} title="Servicios" sub="Los precios se ajustan al tamaño del vehículo.">
+        <div className="space-y-2 mt-3">{cfg.servicios.map(s=>{ const on=f.servicios.includes(s.id);
+          return (<button key={s.id} onClick={()=>set("servicios",toggle(f.servicios,s.id))} className={"lav-press w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition-all "+(on?"border-blue-500 bg-blue-50":"border-slate-100")}><span className={"w-6 h-6 rounded-lg flex items-center justify-center transition-colors "+(on?"bg-blue-500 text-white":"border-2 border-slate-200")}>{on&&<Ic p={P.check} size={15}/>}</span><span className="flex-1 text-sm font-semibold text-slate-600">{s.nombre}</span><span className="text-sm font-extrabold text-blue-600">{money(precioServicio(s,mult))}</span></button>); })}</div>
+        <div className="flex justify-between items-center mt-3 pt-3 border-t-2 border-dashed border-blue-100"><span className="text-sm font-bold text-slate-500">Total</span><span className="text-2xl font-extrabold text-blue-600">{money(total)}</span></div>
+      </Sec>
+
+      <Sec p={P.grid} title="Asignación">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Bahía"><select className={inp} value={f.bahia} onChange={e=>set("bahia",e.target.value)}>{cfg.bahias.map(b=><option key={b}>{b}</option>)}</select></Field>
+          <Field label="Lavador"><select className={inp} value={f.lavador} onChange={e=>set("lavador",e.target.value)}>{cfg.lavadores.map(l=><option key={l}>{l}</option>)}</select></Field>
+        </div>
+      </Sec>
+
+      <Sec p={P.clip} title="Inspección de ingreso" sub="Marca los daños existentes para evitar reclamos.">
+        <div className="flex flex-wrap gap-2 mt-3 mb-3">{CHECK_ITEMS.map(c=>{ const on=f.danos.includes(c);
+          return (<button key={c} onClick={()=>set("danos",toggle(f.danos,c))} className={"lav-press text-xs px-3 py-1.5 rounded-full border-2 font-bold transition-all "+(on?"border-amber-400 bg-amber-50 text-amber-600":"border-slate-100 text-slate-400")}>{on&&"⚠ "}{c}</button>); })}</div>
+        <Field label="Objetos de valor a bordo"><input className={inp} value={f.objetos} onChange={e=>set("objetos",e.target.value)} placeholder="Ej: cargador, gafas"/></Field>
+        <div className="mt-3"><Field label="Notas"><textarea className={inp} rows={2} value={f.notas} onChange={e=>set("notas",e.target.value)} placeholder="Observaciones..."/></Field></div>
+      </Sec>
+
+      {err&&<p className="text-sm font-bold text-rose-500 text-center bg-rose-50 rounded-xl py-2">{err}</p>}
+      <button onClick={submit} className="lav-press w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-blue-200"><Ic p={P.plus} size={22}/> Ingresar vehículo · {money(total)}</button>
+    </div>
+  );
+}
+
+/* ====== TABLERO ====== */
+function Tablero({ orders, totalOrden, cfg, onUpd, onDel }){
+  if(orders.length===0) return <Empty p={P.grid} title="Sin vehículos aún" msg="Registra un ingreso en Recepción para verlo rodar por aquí." />;
+  return (<div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">{ESTADOS.map(e=>{ const list=orders.filter(o=>o.estado===e.id); const st=EST[e.id];
+    return (<div key={e.id} className={"flex-1 min-w-[260px] rounded-2xl border-2 p-2.5 "+st.col}>
+      <div className="flex items-center gap-2 px-1 py-1 mb-1.5"><span className={"w-3 h-3 rounded-full "+st.dot}/><span className={"font-extrabold text-sm "+st.head}>{e.label}</span><span className="ml-auto text-xs font-bold text-slate-400 bg-white/70 rounded-full px-2 py-0.5">{list.length}</span></div>
+      <div className="space-y-2.5">{list.map(o=><Card key={o.id} o={o} total={totalOrden(o)} cfg={cfg} onUpd={onUpd} onDel={onDel}/>)}{list.length===0&&<p className="text-xs text-slate-300 text-center py-5 font-bold">vacío</p>}</div>
+    </div>); })}</div>);
+}
+function Card({ o, total, cfg, onUpd, onDel }){
+  const idx=ESTADOS.findIndex(e=>e.id===o.estado); const tipo=tipoOf(o.tipo); const st=EST[o.estado]||EST.listo;
+  const pct=Math.round((idx/(ESTADOS.length-1))*100);
+  const [payOpen,setPayOpen]=useState(false); const [delOpen,setDelOpen]=useState(false);
+  const move=(d)=>{ const n=ESTADOS[idx+d]; if(n)onUpd(o.id,{estado:n.id}); };
+  const waMsg=encodeURIComponent(`Hola ${o.cliente||""}! 🚗 Su vehículo ${o.marca||""} placa ${o.placa} ya está *LISTO para entrega* en ${cfg.negocio}. ¡Gracias por su preferencia!`);
+  const waHref=`https://wa.me/${waNumber(o.whatsapp)}?text=${waMsg}`;
+  const cobrar=(m)=>{ onUpd(o.id,{pago:{metodo:m,monto:total,pagado:true}}); setPayOpen(false); };
+  return (
+    <div className="bg-white rounded-xl border border-slate-100 p-3 shadow-sm relative">
+      <div className="flex items-start gap-2.5"><span className={"p-2 rounded-xl "+tipo.tint}><Ic p={tipo.pth} size={18}/></span>
+        <div className="flex-1 min-w-0"><p className="font-mono font-extrabold text-slate-800 tracking-wider leading-none">{o.placa}</p><p className="text-xs text-slate-400 truncate font-semibold mt-1">{[o.marca,o.color].filter(Boolean).join(" · ")||tipo.label}</p></div>
+        <button onClick={()=>setDelOpen(true)} className="text-slate-200 hover:text-rose-500 lav-press"><Ic p={P.trash} size={15}/></button>
+      </div>
+      <div className="mt-2.5 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className="lav-progress h-full rounded-full" style={{width:pct+"%",background:st.fill}}/></div>
+      <div className="flex flex-wrap gap-1 mt-2.5 text-xs font-bold">
+        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg">{o.bahia}</span>
+        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.user} size={11}/>{o.lavador}</span>
+        <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg">{money(total)}</span>
+        {o.pago?.pagado&&<span className="bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.ok} size={11}/>{o.pago.metodo}</span>}
+      </div>
+      {o.danos?.length>0&&<p className="text-xs text-amber-500 mt-2 flex items-start gap-1 font-bold"><Ic p={P.alert} size={12} className="mt-0.5 shrink-0"/> {o.danos.join(", ")}</p>}
+      {o.estado==="listo"&&<a href={waHref} target="_blank" rel="noreferrer" className="lav-cta mt-2.5 w-full bg-gradient-to-r from-emerald-500 to-green-500 text-white text-sm font-extrabold py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-200"><Ic p={P.msg} size={16}/> Avisar por WhatsApp</a>}
+      {payOpen&&(<div className="lav-pop mt-2.5 bg-slate-50 border-2 border-slate-100 rounded-xl p-2.5"><p className="text-xs font-bold text-slate-500 mb-2 text-center">Cobrar {money(total)} con:</p><div className="grid grid-cols-2 gap-1.5">{METODOS.map(m=>(<button key={m} onClick={()=>cobrar(m)} className="lav-press bg-white border-2 border-slate-200 hover:border-blue-400 rounded-lg py-2 text-xs font-extrabold text-slate-600">{m}</button>))}</div><button onClick={()=>setPayOpen(false)} className="w-full text-xs font-bold text-slate-400 mt-2">Cancelar</button></div>)}
+      {!payOpen&&(<div className="flex gap-1.5 mt-2.5"><button onClick={()=>move(-1)} disabled={idx===0} className="lav-press flex items-center justify-center px-3 py-2 rounded-xl border-2 border-slate-100 text-slate-400 disabled:opacity-30"><Ic p={P.left} size={16}/></button>{!o.pago?.pagado&&<button onClick={()=>setPayOpen(true)} className="lav-press flex-1 flex items-center justify-center py-2 rounded-xl bg-slate-800 text-white text-xs font-extrabold gap-1"><Ic p={P.dollar} size={14}/> Cobrar</button>}{o.estado!=="listo"?<button onClick={()=>move(1)} className="lav-press flex-1 flex items-center justify-center py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold gap-1">Avanzar <Ic p={P.right} size={16}/></button>:<button onClick={()=>onUpd(o.id,{estado:"entregado"})} className="lav-press flex-1 flex items-center justify-center py-2 rounded-xl bg-emerald-600 text-white font-extrabold gap-1"><Ic p={P.check} size={16}/> Entregar</button>}</div>)}
+      {delOpen&&(<div className="absolute inset-0 bg-white/95 rounded-xl flex flex-col items-center justify-center gap-2 p-3 lav-pop"><p className="text-sm font-extrabold text-slate-700 text-center">¿Eliminar {o.placa}?</p><div className="flex gap-2 w-full"><button onClick={()=>setDelOpen(false)} className="lav-press flex-1 py-2 rounded-lg border-2 border-slate-200 font-bold text-slate-500 text-sm">No</button><button onClick={()=>onDel(o.id)} className="lav-press flex-1 py-2 rounded-lg bg-rose-500 text-white font-bold text-sm">Sí, eliminar</button></div></div>)}
+    </div>
+  );
+}
+
+/* ====== CAJA ====== */
+function Caja({ orders, totalOrden, cfg }){
+  const now=new Date();
+  const startToday=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  const dow=(now.getDay()+6)%7; // lunes = 0
+  const startWeek=new Date(now.getFullYear(),now.getMonth(),now.getDate()-dow).getTime();
+  const startMonth=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  const pagados=orders.filter(o=>o.pago?.pagado);
+  const rango=(from)=>pagados.filter(o=>Number(o.fecha||0)>=from);
+  const sum=(arr)=>arr.reduce((a,o)=>a+totalOrden(o),0);
+  const hoy=rango(startToday), semana=rango(startWeek), mes=rango(startMonth);
+  const porMetodo=METODOS.map(m=>({m,total:hoy.filter(o=>o.pago.metodo===m).reduce((a,o)=>a+totalOrden(o),0)})).filter(x=>x.total>0);
+  const comis={}; hoy.forEach(o=>{ comis[o.lavador]=(comis[o.lavador]||0)+totalOrden(o)*(cfg.comisionPct/100); });
+
+  return (<div className="space-y-4">
+    <div className="rounded-2xl p-5 shadow-sm bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
+      <p className="text-xs font-bold text-cyan-50">Ingresos de hoy</p>
+      <p className="font-extrabold text-4xl mt-1">{money(sum(hoy))}</p>
+      <p className="text-xs font-bold text-cyan-50 mt-1">{hoy.length} vehículo{hoy.length!==1?"s":""} cobrado{hoy.length!==1?"s":""}</p>
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      <Stat label="Esta semana" value={money(sum(semana))} sub={`${semana.length} vehículos`}/>
+      <Stat label="Este mes" value={money(sum(mes))} sub={`${mes.length} vehículos`}/>
+    </div>
+    <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">Métodos de pago (hoy)</h2>{porMetodo.length===0?<p className="text-sm text-slate-400 font-semibold">Aún no hay cobros hoy.</p>:<div className="space-y-2.5">{porMetodo.map(x=>(<div key={x.m} className="flex justify-between items-center text-sm"><span className="text-slate-500 font-semibold">{x.m}</span><span className="font-extrabold text-slate-700">{money(x.total)}</span></div>))}</div>}</section>
+    <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">Comisiones de hoy ({cfg.comisionPct}%)</h2>{Object.keys(comis).length===0?<p className="text-sm text-slate-400 font-semibold">Sin datos.</p>:<div className="space-y-2.5">{Object.entries(comis).map(([l,c])=>(<div key={l} className="flex justify-between items-center text-sm"><span className="text-slate-500 font-semibold flex items-center gap-1.5"><span className="bg-slate-100 p-1 rounded-lg"><Ic p={P.user} size={13}/></span>{l}</span><span className="font-extrabold text-emerald-600">{money(c)}</span></div>))}</div>}</section>
+    <p className="text-xs text-slate-400 font-semibold text-center">Los cobros se registran con el botón <b>Cobrar</b> del Tablero.</p>
+  </div>);
+}
+function Stat({label,value,big,grad,sub}){ return (<div className={"rounded-2xl p-3.5 shadow-sm "+(grad?"bg-gradient-to-br from-cyan-500 to-blue-600 text-white":"bg-white border border-blue-50")}><p className={"text-xs font-bold "+(grad?"text-cyan-50":"text-slate-400")}>{label}</p><p className={"font-extrabold "+(big?"text-2xl":"text-xl")+(grad?"":" text-slate-800")}>{value}</p>{sub&&<p className={"text-[11px] font-bold mt-0.5 "+(grad?"text-cyan-50":"text-slate-400")}>{sub}</p>}</div>); }
+
+/* ====== CLIENTES ====== */
+function Clientes({ clientes, vehiculos, cfg }){
+  const [soloFrec,setSoloFrec]=useState(false);
+  let list=[...clientes].sort((a,b)=>(b.visitas||0)-(a.visitas||0));
+  if(soloFrec) list=list.filter(c=>(c.visitas||0)>=META_LEALTAD);
+  if(clientes.length===0) return <Empty p={P.users} title="Sin clientes aún" msg="Se registran solos al ingresar vehículos." />;
+  return (<div className="space-y-3">
+    <div className="flex items-center gap-2"><button onClick={()=>setSoloFrec(false)} className={"lav-press flex-1 py-2 rounded-xl text-sm font-extrabold "+(!soloFrec?"bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow":"bg-white border border-blue-50 text-slate-500")}>Todos ({clientes.length})</button><button onClick={()=>setSoloFrec(true)} className={"lav-press flex-1 py-2 rounded-xl text-sm font-extrabold flex items-center justify-center gap-1 "+(soloFrec?"bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow":"bg-white border border-blue-50 text-slate-500")}><Ic p={P.star} size={15}/> Frecuentes</button></div>
+    {list.map(c=>{ const misVeh=vehiculos.filter(v=>v.clienteId===c.id); const s=c.visitas%META_LEALTAD; const premio=premioListo(c.visitas);
+      const promo=encodeURIComponent(`Hola ${c.nombre||""}! 🚗💦 En ${cfg.negocio} valoramos tu preferencia (${c.visitas} lavados). ${premio?"¡Tienes un LAVADO GRATIS disponible! 🎁":"Te falta poco para tu lavado gratis."} ¡Te esperamos!`);
+      const wa=`https://wa.me/${waNumber(c.whatsapp)}?text=${promo}`;
+      return (<div key={c.id} className="bg-white rounded-2xl border border-blue-50 shadow-sm p-3.5">
+        <div className="flex items-center gap-3"><span className="bg-gradient-to-br from-cyan-400 to-blue-500 text-white p-2.5 rounded-xl"><Ic p={P.user} size={20}/></span><div className="flex-1 min-w-0"><p className="font-extrabold text-slate-700 truncate flex items-center gap-1.5">{c.nombre||"—"}{c.visitas>=META_LEALTAD&&<Ic p={P.star} size={14} fill="#fbbf24" className="text-amber-400"/>}</p><p className="text-xs text-slate-400 font-bold">{c.whatsapp||"sin WhatsApp"}</p></div><div className="text-right"><p className="text-2xl font-extrabold text-blue-600 leading-none">{c.visitas}</p><p className="text-[10px] font-bold text-slate-400">visitas</p></div></div>
+        {misVeh.length>0&&(<div className="flex flex-wrap gap-1.5 mt-2.5">{misVeh.map(v=>{ const T=tipoOf(v.tipo); return (<span key={v.id} className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-xs font-bold text-slate-500"><Ic p={T.pth} size={12} className="text-slate-400"/><span className="font-mono">{v.placa}</span></span>); })}</div>)}
+        <div className="flex items-center gap-1.5 mt-3">{Array.from({length:META_LEALTAD}).map((_,i)=>(<span key={i} className={"flex-1 h-2 rounded-full "+(i<(premio?META_LEALTAD:s)?"bg-gradient-to-r from-cyan-400 to-blue-500":"bg-slate-100")}/>))}</div>
+        {premio?<p className="text-xs font-extrabold text-emerald-600 mt-2 flex items-center gap-1"><Ic p={P.gift} size={13}/> ¡Lavado gratis disponible!</p>:<p className="text-xs font-bold text-slate-400 mt-2">Faltan {META_LEALTAD-s} para lavado gratis</p>}
+        <a href={wa} target="_blank" rel="noreferrer" className="lav-press mt-2.5 w-full bg-emerald-50 text-emerald-600 border-2 border-emerald-100 text-sm font-extrabold py-2 rounded-xl flex items-center justify-center gap-1.5"><Ic p={P.msg} size={15}/> Enviar promoción</a>
+      </div>); })}
+  </div>);
+}
+
+/* ====== AJUSTES ====== */
+function Ajustes({ cfg, updateCfg }){
+  const [nl,setNl]=useState(""); const [nb,setNb]=useState("");
+  const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500";
+  const Sec=({title,children})=>(<section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">{title}</h2>{children}</section>);
+  const ListEditor=({items,upd,ph,val,setVal})=>(<><div className="space-y-2 mb-2">{items.map((it,i)=>(<div key={i} className="flex items-center gap-2"><span className="flex-1 text-sm font-semibold bg-blue-50/60 rounded-xl px-3 py-2.5 border-2 border-blue-50">{it}</span><button onClick={()=>upd(items.filter((_,j)=>j!==i))} className="lav-press text-slate-300 hover:text-rose-500"><Ic p={P.x} size={18}/></button></div>))}</div><div className="flex gap-2"><input className={inp} value={val} onChange={e=>setVal(e.target.value)} placeholder={ph}/><button onClick={()=>{ if(val.trim()){ upd([...items,val.trim()]); setVal(""); } }} className="lav-press bg-gradient-to-br from-cyan-500 to-blue-600 text-white px-4 rounded-xl"><Ic p={P.plus} size={18}/></button></div></>);
+  return (<div className="space-y-4">
+    <Sec title="Negocio"><label className="block mb-3"><span className="text-xs font-bold text-slate-400">Nombre</span><input className={inp+" mt-1"} value={cfg.negocio} onChange={e=>updateCfg({negocio:e.target.value})}/></label><label className="block"><span className="text-xs font-bold text-slate-400">Comisión al lavador (%)</span><input className={inp+" mt-1"} type="number" value={cfg.comisionPct} onChange={e=>updateCfg({comisionPct:Number(e.target.value)||0})}/></label></Sec>
+    <Sec title="Precios base (Auto/Sedán)"><p className="text-xs text-slate-400 mb-3 font-semibold">Los demás tamaños se calculan solos.</p><div className="space-y-2">{cfg.servicios.map(s=>(<div key={s.id} className="flex items-center gap-2"><span className="flex-1 text-sm font-semibold text-slate-600">{s.nombre}</span><span className="text-slate-400 text-sm font-bold">$</span><input type="number" value={s.base} className="w-20 rounded-xl border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-right outline-none focus:border-blue-500" onChange={e=>updateCfg({servicios:cfg.servicios.map(x=>x.id===s.id?{...x,base:Number(e.target.value)||0}:x)})}/></div>))}</div></Sec>
+    <Sec title="Lavadores"><ListEditor items={cfg.lavadores} upd={(v)=>updateCfg({lavadores:v})} ph="Nombre del lavador" val={nl} setVal={setNl}/></Sec>
+    <Sec title="Bahías"><ListEditor items={cfg.bahias} upd={(v)=>updateCfg({bahias:v})} ph="Ej: Bahía 4" val={nb} setVal={setNb}/></Sec>
+    <LicenciaAdmin cfg={cfg} updateCfg={updateCfg} />
+  </div>);
+}
+
+/* ====== LICENCIA / SUSCRIPCIÓN ====== */
+function Aviso({dias,lic,negocio}){
+  const wa = lic.contacto?.whatsapp ? `https://wa.me/${waNumber(lic.contacto.whatsapp)}?text=${encodeURIComponent(`Hola, quiero renovar la licencia de ${negocio}.`)}` : null;
+  return (<div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-3 mb-4 flex items-center gap-3">
+    <span className="bg-amber-100 text-amber-600 p-2 rounded-xl"><Ic p={P.alert} size={18}/></span>
+    <p className="flex-1 text-sm font-bold text-amber-700">Licencia por vencer: quedan {dias} día{dias!==1?"s":""}. Contacta al proveedor para renovar.</p>
+    {wa&&<a href={wa} target="_blank" rel="noreferrer" className="lav-press bg-amber-500 text-white text-xs font-extrabold px-3 py-2 rounded-lg shrink-0">Renovar</a>}
+  </div>);
+}
+
+function Bloqueo({cfg,updateCfg}){
+  const lic=cfg.licencia||{};
+  const [pin,setPin]=useState(""); const [modo,setModo]=useState(false); const [msg,setMsg]=useState("");
+  const dias=lic.dias||15;
+  const wa = lic.contacto?.whatsapp ? `https://wa.me/${waNumber(lic.contacto.whatsapp)}?text=${encodeURIComponent(`Hola, quiero renovar la licencia de ${cfg.negocio}.`)}` : null;
+  const entrar=()=>{ if(pin===String(lic.pin||"")){ setModo(true); setMsg(""); } else setMsg("PIN incorrecto."); };
+  const renovar=(d)=>updateCfg({licencia:{...lic, vencimiento: Date.now()+d*86400000}});
+  return (<div className="lav-bg min-h-screen flex items-center justify-center p-6">
+    <div className="bg-white rounded-3xl shadow-xl border border-slate-100 max-w-sm w-full p-6 text-center">
+      <div className="inline-flex bg-rose-100 text-rose-500 p-4 rounded-2xl mb-3"><Ic p={P.alert} size={36}/></div>
+      <h1 className="font-extrabold text-xl text-slate-800">Servicio suspendido</h1>
+      <p className="text-sm text-slate-500 font-semibold mt-2">El período de uso de <b>{cfg.negocio}</b> ha finalizado. Contacta al proveedor para renovar tu licencia y reactivar la aplicación.</p>
+      {wa&&<a href={wa} target="_blank" rel="noreferrer" className="lav-press mt-4 w-full bg-emerald-500 text-white font-extrabold py-3 rounded-xl flex items-center justify-center gap-2"><Ic p={P.msg} size={18}/> Contactar al proveedor</a>}
+      {modo===false&&<button onClick={()=>setModo("pin")} className="mt-3 text-xs font-bold text-slate-400 underline">Soy el proveedor</button>}
+      {modo==="pin"&&(<div className="mt-4 lav-pop"><input value={pin} onChange={e=>setPin(e.target.value)} inputMode="numeric" placeholder="PIN del proveedor" className="w-full text-center text-lg font-extrabold rounded-xl border-2 border-slate-200 py-2.5 outline-none focus:border-blue-500"/>{msg&&<p className="text-xs font-bold text-rose-500 mt-1">{msg}</p>}<button onClick={entrar} className="lav-press mt-2 w-full bg-blue-600 text-white font-extrabold py-2.5 rounded-xl">Ingresar</button></div>)}
+      {modo===true&&(<div className="mt-4 lav-pop"><p className="text-sm font-bold text-slate-600 mb-2">Renovar licencia por:</p><div className="grid grid-cols-3 gap-2">{[15,30,90].map(d=>(<button key={d} onClick={()=>renovar(d)} className="lav-press bg-blue-50 border-2 border-blue-100 text-blue-700 font-extrabold py-2 rounded-xl text-sm">{d} días</button>))}</div><button onClick={()=>renovar(dias)} className="lav-press mt-2 w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-2.5 rounded-xl">Renovar {dias} días (predet.)</button></div>)}
+    </div>
+  </div>);
+}
+
+function LicenciaAdmin({cfg,updateCfg}){
+  const lic=cfg.licencia||{};
+  const [open,setOpen]=useState(false); const [pin,setPin]=useState(""); const [msg,setMsg]=useState("");
+  const venc=lic.vencimiento||0; const dias=lic.dias||15;
+  const rest=Math.ceil((venc-Date.now())/86400000);
+  const fecha = venc? new Date(venc).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit',year:'numeric'}) : "—";
+  const entrar=()=>{ if(pin===String(lic.pin||"")){ setOpen(true); setMsg(""); } else setMsg("PIN incorrecto."); };
+  const setLic=(patch)=>updateCfg({licencia:{...lic,...patch}});
+  const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500";
+  return (<section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
+    <h2 className="font-extrabold mb-1 text-slate-700 flex items-center gap-2"><span className="bg-gradient-to-br from-cyan-400 to-blue-500 text-white p-1.5 rounded-lg"><Ic p={P.wallet} size={16}/></span> Licencia / suscripción</h2>
+    <p className="text-xs text-slate-400 font-semibold mb-3">Solo el proveedor. Vence: <b>{fecha}</b> ({rest>=0?`quedan ${rest} días`:"vencida"}).</p>
+    {!open?(<div><div className="flex gap-2"><input value={pin} onChange={e=>setPin(e.target.value)} inputMode="numeric" placeholder="PIN del proveedor" className={inp}/><button onClick={entrar} className="lav-press bg-blue-600 text-white px-4 rounded-xl font-extrabold">Abrir</button></div>{msg&&<p className="text-xs font-bold text-rose-500 mt-1">{msg}</p>}</div>):(
+      <div className="space-y-3 lav-pop">
+        <label className="block"><span className="text-xs font-bold text-slate-400">Duración por defecto (días)</span><input type="number" value={dias} onChange={e=>setLic({dias:Number(e.target.value)||0})} className={inp+" mt-1"}/></label>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={()=>setLic({vencimiento:Date.now()+(dias||15)*86400000})} className="lav-press bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-2.5 rounded-xl text-sm">Renovar +{dias} días</button>
+          <button onClick={()=>setLic({vencimiento:Date.now()+30*86400000})} className="lav-press bg-blue-50 border-2 border-blue-100 text-blue-700 font-extrabold py-2.5 rounded-xl text-sm">Renovar 1 mes</button>
+        </div>
+        <label className="block"><span className="text-xs font-bold text-slate-400">Vencimiento exacto</span><input type="date" value={venc?new Date(venc).toISOString().slice(0,10):""} onChange={e=>{ const d=e.target.value?new Date(e.target.value+"T23:59:59").getTime():venc; setLic({vencimiento:d}); }} className={inp+" mt-1"}/></label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block"><span className="text-xs font-bold text-slate-400">Contacto (nombre)</span><input value={lic.contacto?.nombre||""} onChange={e=>setLic({contacto:{...(lic.contacto||{}),nombre:e.target.value}})} className={inp+" mt-1"}/></label>
+          <label className="block"><span className="text-xs font-bold text-slate-400">Contacto WhatsApp</span><input value={lic.contacto?.whatsapp||""} onChange={e=>setLic({contacto:{...(lic.contacto||{}),whatsapp:e.target.value}})} className={inp+" mt-1"} inputMode="tel"/></label>
+        </div>
+        <label className="block"><span className="text-xs font-bold text-slate-400">Cambiar PIN del proveedor</span><input value={String(lic.pin||"")} onChange={e=>setLic({pin:e.target.value})} className={inp+" mt-1"}/></label>
+        <button onClick={()=>setLic({vencimiento:Date.now()-1000})} className="lav-press w-full border-2 border-rose-200 text-rose-500 font-extrabold py-2.5 rounded-xl text-sm">Suspender ahora (probar bloqueo)</button>
+      </div>
+    )}
+  </section>);
+}
+
+/* ====== VARIOS ====== */
+function Empty({p,title,msg}){ return (<div className="lav-pop bg-white rounded-2xl border border-blue-50 shadow-sm p-10 text-center"><span className="inline-flex bg-blue-50 text-blue-400 p-4 rounded-2xl mb-3"><Ic p={p} size={32}/></span><h3 className="font-extrabold text-slate-700">{title}</h3><p className="text-sm text-slate-400 mt-1 font-semibold">{msg}</p></div>); }
+function Splash({msg,err}){ return (<div className="lav-bg min-h-screen flex flex-col items-center justify-center gap-3 p-6 text-center"><div className={"p-4 rounded-2xl "+(err?"bg-rose-100 text-rose-500":"bg-blue-100 text-blue-500")}><Ic p={err?P.alert:P.drop} size={36}/></div><p className={"font-extrabold "+(err?"text-rose-500":"text-slate-500")}>{msg}</p></div>); }
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+<script>
+if('serviceWorker' in navigator){ window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }
+</script>
+</body>
+</html>
