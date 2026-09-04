@@ -130,6 +130,8 @@ const premioListo = (v) => v>0 && v%META_LEALTAD===0;
 const vehFromDb = (r) => ({ id:r.id, placa:r.placa, tipo:r.tipo, marca:r.marca, color:r.color, clienteId:r.cliente_id });
 const vehToDb = (v) => ({ id:v.id, placa:v.placa, tipo:v.tipo, marca:v.marca, color:v.color, cliente_id:v.clienteId });
 function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+function csv(rows){ if(!rows||!rows.length) return ""; const cols=Object.keys(rows[0]); const esc=(v)=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"'; return cols.join(",")+"\n"+rows.map(r=>cols.map(k=>esc(r[k])).join(",")).join("\n"); }
+function descargar(nombre,contenido,tipo){ const blob=new Blob([contenido],{type:tipo}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 
 /* ====== APP ====== */
 function App(){
@@ -139,19 +141,22 @@ function App(){
   const [orders, setOrders] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
+  const [gastos, setGastos] = useState([]);
   const [cfg, setCfg] = useState({ negocio:"Mi Lavadora", comisionPct:30, lavadores:["Carlos","Luis","Marco"], bahias:["Bahía 1","Bahía 2","Bahía 3"], servicios:SERVICIOS_SEED, turno:{abierto:false,apertura:0,hora:null}, licencia:{pin:"1234",dias:15} });
 
   const reloadAll = async () => {
-    const [c,v,o,cf] = await Promise.all([
+    const [c,v,o,cf,g] = await Promise.all([
       SB.from("clientes").select("*"),
       SB.from("vehiculos").select("*"),
       SB.from("orders").select("*").order("fecha",{ascending:false}),
       SB.from("config").select("*").eq("id",1).single(),
+      SB.from("gastos").select("*").order("fecha",{ascending:false}),
     ]);
     setClientes(c.data||[]);
     setVehiculos((v.data||[]).map(vehFromDb));
     const norm=(x)=>({...x, estado:["lavando","secado","detallado"].includes(x.estado)?"proceso":x.estado});
     setOrders((o.data||[]).map(norm));
+    setGastos(g.data||[]);
     if(cf.data) setCfg({ negocio:cf.data.negocio||"Mi Lavadora", comisionPct:cf.data.comision_pct??30,
       lavadores:cf.data.lavadores||["Carlos","Luis","Marco"], bahias:cf.data.bahias||["Bahía 1","Bahía 2","Bahía 3"],
       servicios:cf.data.servicios||SERVICIOS_SEED, turno:cf.data.turno||{abierto:false,apertura:0,hora:null}, licencia:{pin:"1234",dias:15,...(cf.data.licencia||{})} });
@@ -197,6 +202,8 @@ function App(){
   const delOrder = (id) => { setOrders(p=>p.filter(o=>o.id!==id)); SB.from("orders").delete().eq("id",id); };
   const updCliente = (id,patch) => { setClientes(p=>p.map(c=>c.id===id?{...c,...patch}:c)); SB.from("clientes").update(patch).eq("id",id); };
   const delCliente = (id) => { setClientes(p=>p.filter(c=>c.id!==id)); setVehiculos(p=>p.filter(v=>v.clienteId!==id)); SB.from("clientes").delete().eq("id",id); SB.from("vehiculos").delete().eq("cliente_id",id); };
+  const addGasto = (monto,motivo) => { const gm={id:uid(),monto:Number(monto)||0,motivo:(motivo||"").trim(),fecha:Date.now()}; setGastos(p=>[gm,...p]); SB.from("gastos").insert(gm); };
+  const delGasto = (id) => { setGastos(p=>p.filter(x=>x.id!==id)); SB.from("gastos").delete().eq("id",id); };
 
   const ingresar = (o) => {
     const placa=o.placa.toUpperCase().trim(), phone=(o.whatsapp||"").trim(), name=(o.cliente||"").trim();
@@ -264,9 +271,9 @@ function App(){
         {tab==="inicio" && <Inicio setTab={setTab} cfg={cfg} orders={orders} totalOrden={totalOrden} />}
         {tab==="recepcion" && <Recepcion cfg={cfg} clientes={clientes} vehiculos={vehiculos} tipoMult={tipoMult} onAdd={ingresar} />}
         {tab==="tablero" && <Tablero orders={orders} totalOrden={totalOrden} cfg={cfg} onUpd={updOrder} onDel={delOrder} />}
-        {tab==="caja" && <Caja orders={orders} totalOrden={totalOrden} cfg={cfg} />}
+        {tab==="caja" && <Caja orders={orders} totalOrden={totalOrden} cfg={cfg} gastos={gastos} onAddGasto={addGasto} onDelGasto={delGasto} />}
         {tab==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} cfg={cfg} onUpd={updCliente} onDel={delCliente} />}
-        {tab==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} />}
+        {tab==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} clientes={clientes} vehiculos={vehiculos} orders={orders} totalOrden={totalOrden} />}
       </main>
       <div className="h-8" />
       {licOpen && <LicenciaModal cfg={cfg} updateCfg={updateCfg} onClose={()=>setLicOpen(false)} />}
@@ -422,7 +429,7 @@ function Card({ o, total, cfg, onUpd, onDel }){
 }
 
 /* ====== CAJA ====== */
-function Caja({ orders, totalOrden, cfg }){
+function Caja({ orders, totalOrden, cfg, gastos, onAddGasto, onDelGasto }){
   const now=new Date();
   const startToday=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
   const dow=(now.getDay()+6)%7; // lunes = 0
@@ -432,8 +439,13 @@ function Caja({ orders, totalOrden, cfg }){
   const rango=(from)=>pagados.filter(o=>Number(o.fecha||0)>=from);
   const sum=(arr)=>arr.reduce((a,o)=>a+totalOrden(o),0);
   const hoy=rango(startToday), semana=rango(startWeek), mes=rango(startMonth);
+  const gRango=(from)=>gastos.filter(g=>Number(g.fecha||0)>=from);
+  const gSum=(arr)=>arr.reduce((a,g)=>a+(Number(g.monto)||0),0);
+  const gHoy=gRango(startToday); const gastoHoy=gSum(gHoy);
   const porMetodo=METODOS.map(m=>({m,total:hoy.filter(o=>o.pago.metodo===m).reduce((a,o)=>a+totalOrden(o),0)})).filter(x=>x.total>0);
   const comis={}; hoy.forEach(o=>{ comis[o.lavador]=(comis[o.lavador]||0)+totalOrden(o)*(cfg.comisionPct/100); });
+  const [monto,setMonto]=useState(""); const [motivo,setMotivo]=useState("");
+  const agregar=()=>{ if(!(Number(monto)>0)) return; onAddGasto(monto,motivo); setMonto(""); setMotivo(""); };
 
   return (<div className="space-y-4">
     <div className="rounded-2xl p-5 shadow-sm bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
@@ -442,9 +454,24 @@ function Caja({ orders, totalOrden, cfg }){
       <p className="text-xs font-bold text-cyan-50 mt-1">{hoy.length} vehículo{hoy.length!==1?"s":""} cobrado{hoy.length!==1?"s":""}</p>
     </div>
     <div className="grid grid-cols-2 gap-3">
-      <Stat label="Esta semana" value={money(sum(semana))} sub={`${semana.length} vehículos`}/>
-      <Stat label="Este mes" value={money(sum(mes))} sub={`${mes.length} vehículos`}/>
+      <Stat label="Gastos de hoy" value={money(gastoHoy)} sub={`${gHoy.length} registro${gHoy.length!==1?"s":""}`}/>
+      <Stat label="Neto de hoy" value={money(sum(hoy)-gastoHoy)} grad/>
     </div>
+    <div className="grid grid-cols-2 gap-3">
+      <Stat label="Neto semana" value={money(sum(semana)-gSum(gRango(startWeek)))} sub={`ingresos ${money(sum(semana))}`}/>
+      <Stat label="Neto mes" value={money(sum(mes)-gSum(gRango(startMonth)))} sub={`ingresos ${money(sum(mes))}`}/>
+    </div>
+
+    <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
+      <h2 className="font-extrabold mb-3 text-slate-700">Registrar gasto</h2>
+      <div className="flex gap-2">
+        <input value={monto} onChange={e=>setMonto(e.target.value)} inputMode="decimal" placeholder="$ Monto" className="w-28 rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-500"/>
+        <input value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Motivo (ej. shampoo)" className="flex-1 rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500"/>
+        <button onClick={agregar} className="lav-press bg-gradient-to-br from-cyan-500 to-blue-600 text-white px-4 rounded-xl font-extrabold"><Ic p={P.plus} size={18}/></button>
+      </div>
+      {gHoy.length>0 && (<div className="mt-3 space-y-2">{gHoy.map(g=>(<div key={g.id} className="flex items-center gap-2 text-sm"><span className="flex-1 text-slate-600 font-semibold truncate">{g.motivo||"Gasto"}</span><span className="font-extrabold text-rose-500">-{money(g.monto)}</span><button onClick={()=>onDelGasto(g.id)} className="lav-press text-slate-300 hover:text-rose-500"><Ic p={P.trash} size={15}/></button></div>))}</div>)}
+    </section>
+
     <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">Métodos de pago (hoy)</h2>{porMetodo.length===0?<p className="text-sm text-slate-400 font-semibold">Aún no hay cobros hoy.</p>:<div className="space-y-2.5">{porMetodo.map(x=>(<div key={x.m} className="flex justify-between items-center text-sm"><span className="text-slate-500 font-semibold">{x.m}</span><span className="font-extrabold text-slate-700">{money(x.total)}</span></div>))}</div>}</section>
     <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">Comisiones de hoy ({cfg.comisionPct}%)</h2>{Object.keys(comis).length===0?<p className="text-sm text-slate-400 font-semibold">Sin datos.</p>:<div className="space-y-2.5">{Object.entries(comis).map(([l,c])=>(<div key={l} className="flex justify-between items-center text-sm"><span className="text-slate-500 font-semibold flex items-center gap-1.5"><span className="bg-slate-100 p-1 rounded-lg"><Ic p={P.user} size={13}/></span>{l}</span><span className="font-extrabold text-emerald-600">{money(c)}</span></div>))}</div>}</section>
     <p className="text-xs text-slate-400 font-semibold text-center">Los cobros se registran con el botón <b>Cobrar</b> del Tablero.</p>
@@ -496,7 +523,7 @@ function ClienteCard({ c, vehiculos, cfg, onUpd, onDel }){
 }
 
 /* ====== AJUSTES ====== */
-function Ajustes({ cfg, updateCfg }){
+function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden }){
   const [nl,setNl]=useState(""); const [nb,setNb]=useState("");
   const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500";
   const Sec=({title,children})=>(<section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">{title}</h2>{children}</section>);
@@ -506,6 +533,14 @@ function Ajustes({ cfg, updateCfg }){
     <Sec title="Precios base (Auto/Sedán)"><p className="text-xs text-slate-400 mb-3 font-semibold">Los demás tamaños se calculan solos.</p><div className="space-y-2">{cfg.servicios.map(s=>(<div key={s.id} className="flex items-center gap-2"><span className="flex-1 text-sm font-semibold text-slate-600">{s.nombre}</span><span className="text-slate-400 text-sm font-bold">$</span><input type="number" value={s.base} className="w-20 rounded-xl border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-right outline-none focus:border-blue-500" onChange={e=>updateCfg({servicios:cfg.servicios.map(x=>x.id===s.id?{...x,base:Number(e.target.value)||0}:x)})}/></div>))}</div></Sec>
     <Sec title="Lavadores"><ListEditor items={cfg.lavadores} upd={(v)=>updateCfg({lavadores:v})} ph="Nombre del lavador" val={nl} setVal={setNl}/></Sec>
     <Sec title="Bahías"><ListEditor items={cfg.bahias} upd={(v)=>updateCfg({bahias:v})} ph="Ej: Bahía 4" val={nb} setVal={setNb}/></Sec>
+    <Sec title="Respaldo / exportar">
+      <p className="text-xs text-slate-400 mb-3 font-semibold">Descarga una copia de tus datos.</p>
+      <div className="space-y-2">
+        <button onClick={()=>descargar(`respaldo-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify({clientes,vehiculos,orders,config:cfg},null,2), "application/json")} className="lav-press w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-2.5 rounded-xl text-sm">Respaldo completo (JSON)</button>
+        <button onClick={()=>descargar(`clientes-${new Date().toISOString().slice(0,10)}.csv`, csv(clientes.map(c=>({nombre:c.nombre,whatsapp:c.whatsapp,visitas:c.visitas}))), "text/csv;charset=utf-8")} className="lav-press w-full bg-blue-50 border-2 border-blue-100 text-blue-700 font-extrabold py-2.5 rounded-xl text-sm">Clientes (CSV)</button>
+        <button onClick={()=>descargar(`cobros-${new Date().toISOString().slice(0,10)}.csv`, csv(orders.filter(o=>o.pago?.pagado).map(o=>({fecha:new Date(Number(o.fecha)).toLocaleString('es-EC'),placa:o.placa,cliente:o.cliente,tipo:o.tipo,total:totalOrden(o),metodo:o.pago?.metodo}))), "text/csv;charset=utf-8")} className="lav-press w-full bg-blue-50 border-2 border-blue-100 text-blue-700 font-extrabold py-2.5 rounded-xl text-sm">Cobros (CSV)</button>
+      </div>
+    </Sec>
   </div>);
 }
 
