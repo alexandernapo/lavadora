@@ -138,7 +138,7 @@ function App(){
   const [orders, setOrders] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
-  const [cfg, setCfg] = useState({ negocio:"Mi Lavadora", comisionPct:30, lavadores:["Carlos","Luis","Marco"], bahias:["Bahía 1","Bahía 2","Bahía 3"], servicios:SERVICIOS_SEED, turno:{abierto:false,apertura:0,hora:null}, licencia:{} });
+  const [cfg, setCfg] = useState({ negocio:"Mi Lavadora", comisionPct:30, lavadores:["Carlos","Luis","Marco"], bahias:["Bahía 1","Bahía 2","Bahía 3"], servicios:SERVICIOS_SEED, turno:{abierto:false,apertura:0,hora:null}, licencia:{pin:"1234",dias:15} });
 
   const reloadAll = async () => {
     const [c,v,o,cf] = await Promise.all([
@@ -153,7 +153,7 @@ function App(){
     setOrders((o.data||[]).map(norm));
     if(cf.data) setCfg({ negocio:cf.data.negocio||"Mi Lavadora", comisionPct:cf.data.comision_pct??30,
       lavadores:cf.data.lavadores||["Carlos","Luis","Marco"], bahias:cf.data.bahias||["Bahía 1","Bahía 2","Bahía 3"],
-      servicios:cf.data.servicios||SERVICIOS_SEED, turno:cf.data.turno||{abierto:false,apertura:0,hora:null}, licencia:cf.data.licencia||{} });
+      servicios:cf.data.servicios||SERVICIOS_SEED, turno:cf.data.turno||{abierto:false,apertura:0,hora:null}, licencia:{pin:"1234",dias:15,...(cf.data.licencia||{})} });
   };
 
   useEffect(() => {
@@ -499,7 +499,7 @@ function Bloqueo({cfg,updateCfg}){
   const [pin,setPin]=useState(""); const [modo,setModo]=useState(false); const [msg,setMsg]=useState("");
   const dias=lic.dias||15;
   const wa = lic.contacto?.whatsapp ? `https://wa.me/${waNumber(lic.contacto.whatsapp)}?text=${encodeURIComponent(`Hola, quiero renovar la licencia de ${cfg.negocio}.`)}` : null;
-  const entrar=()=>{ if(pin===String(lic.pin||"")){ setModo(true); setMsg(""); } else setMsg("PIN incorrecto."); };
+  const entrar=()=>{ if(pin===String(lic.pin||"1234")){ setModo(true); setMsg(""); } else setMsg("PIN incorrecto."); };
   const renovar=(d)=>updateCfg({licencia:{...lic, vencimiento: Date.now()+d*86400000}});
   return (<div className="lav-bg min-h-screen flex items-center justify-center p-6">
     <div className="bg-white rounded-3xl shadow-xl border border-slate-100 max-w-sm w-full p-6 text-center">
@@ -520,7 +520,7 @@ function LicenciaModal({cfg,updateCfg,onClose}){
   const venc=lic.vencimiento||0; const dias=lic.dias||15;
   const rest=Math.ceil((venc-Date.now())/86400000);
   const fecha = venc? new Date(venc).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit',year:'numeric'}) : "—";
-  const entrar=()=>{ if(pin===String(lic.pin||"")){ setOpen(true); setMsg(""); } else setMsg("PIN incorrecto."); };
+  const entrar=()=>{ if(pin===String(lic.pin||"1234")){ setOpen(true); setMsg(""); } else setMsg("PIN incorrecto."); };
   const setLic=(patch)=>updateCfg({licencia:{...lic,...patch}});
   const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500";
   return (<div className="fixed inset-0 z-50 bg-slate-900/40 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
