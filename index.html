@@ -138,6 +138,8 @@ function App(){
   const [estado, setEstado] = useState("cargando"); // cargando | ok | error
   const [tab, setTab] = useState("inicio");
   const [licOpen,setLicOpen]=useState(false);
+  const [dbErr,setDbErr]=useState("");
+  const rep=(p)=>{ if(p&&p.then) p.then(r=>{ if(r&&r.error) setDbErr(r.error.message||JSON.stringify(r.error)); }).catch(e=>setDbErr(String(e))); return p; };
   const [orders, setOrders] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
@@ -166,10 +168,13 @@ function App(){
     (async () => {
       try {
         // sembrar datos de ejemplo si está vacío
-        const { count } = await SB.from("clientes").select("*",{count:"exact",head:true});
+        const { count, error:ce } = await SB.from("clientes").select("*",{count:"exact",head:true});
+        if(ce) setDbErr("Lectura: "+ce.message);
         if((count||0)===0){
-          await SB.from("clientes").insert(CLIENTES_SEED);
-          await SB.from("vehiculos").insert(VEHICULOS_SEED);
+          const r1=await SB.from("clientes").insert(CLIENTES_SEED);
+          const r2=await SB.from("vehiculos").insert(VEHICULOS_SEED);
+          if(r1.error) setDbErr("Guardar: "+r1.error.message);
+          else if(r2.error) setDbErr("Guardar: "+r2.error.message);
         }
         // asegurar servicios en config
         const cf = await SB.from("config").select("servicios").eq("id",1).single();
@@ -267,6 +272,7 @@ function App(){
         </div>
       </nav>}
       <main className="max-w-6xl mx-auto p-4">
+        {dbErr && <div className="bg-rose-50 border-2 border-rose-200 rounded-xl p-3 mb-4 text-xs font-bold text-rose-600">⚠ No se pudo guardar/leer en la base: {dbErr} <button onClick={()=>setDbErr("")} className="underline ml-1">ocultar</button></div>}
         {venc>0 && !expirado && diasRest<=5 && <Aviso dias={diasRest} lic={lic} negocio={cfg.negocio} />}
         {tab==="inicio" && <Inicio setTab={setTab} cfg={cfg} orders={orders} totalOrden={totalOrden} />}
         {tab==="recepcion" && <Recepcion cfg={cfg} clientes={clientes} vehiculos={vehiculos} tipoMult={tipoMult} onAdd={ingresar} />}
