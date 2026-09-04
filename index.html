@@ -281,6 +281,12 @@ function App(){
   );
 }
 
+/* ====== UI REUTILIZABLE ====== */
+function Field({label,children}){ return (<label className="block"><span className="text-xs font-bold text-slate-400">{label}</span>{children}</label>); }
+function Sec({p,title,sub,children}){ return (<section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold flex items-center gap-2 text-slate-700">{p&&<span className="bg-gradient-to-br from-cyan-400 to-blue-500 text-white p-1.5 rounded-lg"><Ic p={p} size={16}/></span>}{title}</h2>{sub&&<p className="text-xs text-slate-400 mt-0.5 mb-3 font-semibold">{sub}</p>}<div className={sub?"":"mt-3"}>{children}</div></section>); }
+function Drop({children}){ return (<div className="absolute z-30 left-0 right-0 mt-1 bg-white rounded-xl border-2 border-blue-100 shadow-lg overflow-hidden">{children}</div>); }
+function ListEditor({items,upd,ph,val,setVal}){ const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500"; return (<><div className="space-y-2 mb-2">{items.map((it,i)=>(<div key={i} className="flex items-center gap-2"><span className="flex-1 text-sm font-semibold bg-blue-50/60 rounded-xl px-3 py-2.5 border-2 border-blue-50">{it}</span><button onClick={()=>upd(items.filter((_,j)=>j!==i))} className="lav-press text-slate-300 hover:text-rose-500"><Ic p={P.x} size={18}/></button></div>))}</div><div className="flex gap-2"><input className={inp} value={val} onChange={e=>setVal(e.target.value)} placeholder={ph}/><button onClick={()=>{ if(val.trim()){ upd([...items,val.trim()]); setVal(""); } }} className="lav-press bg-gradient-to-br from-cyan-500 to-blue-600 text-white px-4 rounded-xl"><Ic p={P.plus} size={18}/></button></div></>); }
+
 /* ====== INICIO (PORTADA) ====== */
 function Inicio({ setTab, cfg, orders, totalOrden }){
   const startToday=new Date(new Date().setHours(0,0,0,0)).getTime();
@@ -330,9 +336,6 @@ function Recepcion({ cfg, clientes, vehiculos, tipoMult, onAdd }){
   const persona=(phoneN&&clientes.find(c=>waNumber(c.whatsapp)===phoneN))||(f.cliente.trim()&&clientes.find(c=>c.nombre.trim().toLowerCase()===f.cliente.trim().toLowerCase()));
   const submit=()=>{ if(!f.placa.trim())return setErr("Ingresa la placa del vehículo."); if(f.servicios.length===0)return setErr("Selecciona al menos un servicio."); onAdd(f); setF(vacio); setErr(""); };
   const inp="mt-1 w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold focus:border-blue-500 outline-none transition-colors";
-  const Field=({label,children})=>(<label className="block"><span className="text-xs font-bold text-slate-400">{label}</span>{children}</label>);
-  const Sec=({p,title,sub,children})=>(<section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold flex items-center gap-2 text-slate-700"><span className="bg-gradient-to-br from-cyan-400 to-blue-500 text-white p-1.5 rounded-lg"><Ic p={p} size={16}/></span>{title}</h2>{sub&&<p className="text-xs text-slate-400 mt-0.5 mb-3 font-semibold">{sub}</p>}<div className={sub?"":"mt-3"}>{children}</div></section>);
-  const Drop=({children})=>(<div className="absolute z-30 left-0 right-0 mt-1 bg-white rounded-xl border-2 border-blue-100 shadow-lg overflow-hidden">{children}</div>);
 
   return (
     <div className="space-y-4">
@@ -526,8 +529,6 @@ function ClienteCard({ c, vehiculos, cfg, onUpd, onDel }){
 function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden }){
   const [nl,setNl]=useState(""); const [nb,setNb]=useState("");
   const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500";
-  const Sec=({title,children})=>(<section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">{title}</h2>{children}</section>);
-  const ListEditor=({items,upd,ph,val,setVal})=>(<><div className="space-y-2 mb-2">{items.map((it,i)=>(<div key={i} className="flex items-center gap-2"><span className="flex-1 text-sm font-semibold bg-blue-50/60 rounded-xl px-3 py-2.5 border-2 border-blue-50">{it}</span><button onClick={()=>upd(items.filter((_,j)=>j!==i))} className="lav-press text-slate-300 hover:text-rose-500"><Ic p={P.x} size={18}/></button></div>))}</div><div className="flex gap-2"><input className={inp} value={val} onChange={e=>setVal(e.target.value)} placeholder={ph}/><button onClick={()=>{ if(val.trim()){ upd([...items,val.trim()]); setVal(""); } }} className="lav-press bg-gradient-to-br from-cyan-500 to-blue-600 text-white px-4 rounded-xl"><Ic p={P.plus} size={18}/></button></div></>);
   return (<div className="space-y-4">
     <Sec title="Negocio"><label className="block mb-3"><span className="text-xs font-bold text-slate-400">Nombre</span><input className={inp+" mt-1"} value={cfg.negocio} onChange={e=>updateCfg({negocio:e.target.value})}/></label><label className="block"><span className="text-xs font-bold text-slate-400">Comisión al lavador (%)</span><input className={inp+" mt-1"} type="number" value={cfg.comisionPct} onChange={e=>updateCfg({comisionPct:Number(e.target.value)||0})}/></label></Sec>
     <Sec title="Precios base (Auto/Sedán)"><p className="text-xs text-slate-400 mb-3 font-semibold">Los demás tamaños se calculan solos.</p><div className="space-y-2">{cfg.servicios.map(s=>(<div key={s.id} className="flex items-center gap-2"><span className="flex-1 text-sm font-semibold text-slate-600">{s.nombre}</span><span className="text-slate-400 text-sm font-bold">$</span><input type="number" value={s.base} className="w-20 rounded-xl border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-right outline-none focus:border-blue-500" onChange={e=>updateCfg({servicios:cfg.servicios.map(x=>x.id===s.id?{...x,base:Number(e.target.value)||0}:x)})}/></div>))}</div></Sec>
