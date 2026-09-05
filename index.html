@@ -258,7 +258,7 @@ function App(){
         <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center gap-3 relative">
           <button onClick={()=>setTab("inicio")} className="flex items-center gap-3 flex-1 min-w-0 text-left lav-press">
             <div className="bg-white/20 p-2 rounded-2xl backdrop-blur"><Ic p={P.drop} size={24}/></div>
-            <div className="flex-1 min-w-0"><h1 className="font-extrabold text-xl leading-tight truncate">{cfg.negocio}</h1><p className="text-cyan-50 text-xs font-semibold">Lavado de vehículos · sincronizado</p></div>
+            <div className="flex-1 min-w-0"><h1 className="font-extrabold text-xl leading-tight truncate">{cfg.negocio}</h1><p className="text-cyan-50 text-xs font-semibold">Lavado de vehículos · v3</p></div>
           </button>
           <button onClick={()=>setLicOpen(true)} aria-hidden="true" tabIndex={-1} className="lav-float-btn absolute right-2 bottom-1 w-7 h-7 rounded-full bg-white/40"></button>
         </div>
@@ -281,7 +281,7 @@ function App(){
         {tab==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} cfg={cfg} onUpd={updCliente} onDel={delCliente} />}
         {tab==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} clientes={clientes} vehiculos={vehiculos} orders={orders} totalOrden={totalOrden} />}
       </main>
-      <div className="h-8" />
+      <div className="text-center text-[11px] text-slate-400 font-bold py-6">Conectado a: {SUPABASE_URL.replace("https://","").split(".")[0]} · v3</div>
       {licOpen && <LicenciaModal cfg={cfg} updateCfg={updateCfg} onClose={()=>setLicOpen(false)} />}
     </div>
   );
