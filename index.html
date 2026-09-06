@@ -203,19 +203,19 @@ function App(){
   const tipoMult = (tid) => tipoOf(tid).mult;
   const totalOrden = (o) => (o.servicios||[]).reduce((a,sid)=>{ const s=cfg.servicios.find(x=>x.id===sid); return a+(s?precioServicio(s,tipoMult(o.tipo)):0); },0);
 
-  const updOrder = (id,patch) => { setOrders(p=>p.map(o=>o.id===id?{...o,...patch}:o)); SB.from("orders").update(patch).eq("id",id); };
-  const delOrder = (id) => { setOrders(p=>p.filter(o=>o.id!==id)); SB.from("orders").delete().eq("id",id); };
-  const updCliente = (id,patch) => { setClientes(p=>p.map(c=>c.id===id?{...c,...patch}:c)); SB.from("clientes").update(patch).eq("id",id); };
-  const delCliente = (id) => { setClientes(p=>p.filter(c=>c.id!==id)); setVehiculos(p=>p.filter(v=>v.clienteId!==id)); SB.from("clientes").delete().eq("id",id); SB.from("vehiculos").delete().eq("cliente_id",id); };
-  const addGasto = (monto,motivo) => { const gm={id:uid(),monto:Number(monto)||0,motivo:(motivo||"").trim(),fecha:Date.now()}; setGastos(p=>[gm,...p]); SB.from("gastos").insert(gm); };
-  const delGasto = (id) => { setGastos(p=>p.filter(x=>x.id!==id)); SB.from("gastos").delete().eq("id",id); };
+  const updOrder = (id,patch) => { setOrders(p=>p.map(o=>o.id===id?{...o,...patch}:o)); rep(SB.from("orders").update(patch).eq("id",id)); };
+  const delOrder = (id) => { setOrders(p=>p.filter(o=>o.id!==id)); rep(SB.from("orders").delete().eq("id",id)); };
+  const updCliente = (id,patch) => { setClientes(p=>p.map(c=>c.id===id?{...c,...patch}:c)); rep(SB.from("clientes").update(patch).eq("id",id)); };
+  const delCliente = (id) => { setClientes(p=>p.filter(c=>c.id!==id)); setVehiculos(p=>p.filter(v=>v.clienteId!==id)); rep(SB.from("clientes").delete().eq("id",id)); rep(SB.from("vehiculos").delete().eq("cliente_id",id)); };
+  const addGasto = (monto,motivo) => { const gm={id:uid(),monto:Number(monto)||0,motivo:(motivo||"").trim(),fecha:Date.now()}; setGastos(p=>[gm,...p]); rep(SB.from("gastos").insert(gm)); };
+  const delGasto = (id) => { setGastos(p=>p.filter(x=>x.id!==id)); rep(SB.from("gastos").delete().eq("id",id)); };
 
   const ingresar = (o) => {
     const placa=o.placa.toUpperCase().trim(), phone=(o.whatsapp||"").trim(), name=(o.cliente||"").trim();
     const order={ id:uid(), placa, tipo:o.tipo, marca:o.marca, color:o.color, cliente:name, whatsapp:phone,
       servicios:o.servicios, bahia:o.bahia, lavador:o.lavador, estado:"espera", danos:o.danos, objetos:o.objetos,
       notas:o.notas, pago:{metodo:"Efectivo",monto:0,pagado:false}, fecha:Date.now() };
-    setOrders(p=>[order,...p]); SB.from("orders").insert(order);
+    setOrders(p=>[order,...p]); rep(SB.from("orders").insert(order));
 
     let persona = (phone && clientes.find(c=>waNumber(c.whatsapp)&&waNumber(c.whatsapp)===waNumber(phone)))
       || (name && clientes.find(c=>c.nombre.trim().toLowerCase()===name.toLowerCase()));
@@ -223,17 +223,17 @@ function App(){
     if(persona){
       clienteId=persona.id;
       const upd={...persona, nombre:name||persona.nombre, whatsapp:phone||persona.whatsapp, visitas:(persona.visitas||0)+1, ultima:Date.now()};
-      setClientes(clientes.map(c=>c.id===persona.id?upd:c)); SB.from("clientes").upsert(upd);
+      setClientes(clientes.map(c=>c.id===persona.id?upd:c)); rep(SB.from("clientes").upsert(upd));
     } else {
       clienteId=uid();
       const nuevo={id:clienteId, nombre:name, whatsapp:phone, visitas:1, ultima:Date.now()};
-      setClientes([...clientes,nuevo]); SB.from("clientes").insert(nuevo);
+      setClientes([...clientes,nuevo]); rep(SB.from("clientes").insert(nuevo));
     }
     const ex = vehiculos.find(v=>v.placa===placa);
     const veh = ex ? {...ex, tipo:o.tipo, marca:o.marca||ex.marca, color:o.color||ex.color, clienteId}
                    : {id:uid(), placa, tipo:o.tipo, marca:o.marca, color:o.color, clienteId};
     setVehiculos(ex ? vehiculos.map(v=>v.id===ex.id?veh:v) : [...vehiculos,veh]);
-    SB.from("vehiculos").upsert(vehToDb(veh));
+    rep(SB.from("vehiculos").upsert(vehToDb(veh)));
     setTab("tablero");
   };
 
