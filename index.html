@@ -336,7 +336,7 @@ function App({demoRole}={}){
             <div className="flex-1 min-w-0"><h1 className="font-extrabold text-xl leading-tight truncate">{cfg.negocio}</h1><p className="text-cyan-50 text-xs font-semibold">Lavado de vehículos · v3</p></div>
           </button>
           <button onClick={logout} className="lav-press text-white text-xs font-extrabold bg-white/20 px-3 py-1.5 rounded-full whitespace-nowrap">{role==="dueno"?"Dueño":role==="empleado"?"Empleado":"Desarrollador"} · Salir</button>
-          <button onClick={()=>setLicOpen(true)} aria-hidden="true" tabIndex={-1} className="lav-float-btn absolute right-2 bottom-1 w-7 h-7 rounded-full bg-white/40"></button>
+          {role==="desarrollador" && <button onClick={()=>setLicOpen(true)} aria-hidden="true" tabIndex={-1} className="lav-float-btn absolute right-2 bottom-1 w-7 h-7 rounded-full bg-white/40"></button>}
         </div>
       </header>
       {T!=="inicio" && <nav className="bg-white/80 backdrop-blur border-b border-blue-100 sticky top-[68px] z-10">
