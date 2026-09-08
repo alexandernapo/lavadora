@@ -245,14 +245,8 @@ function App({demoRole}={}){
     (async () => {
       try {
         // sembrar datos de ejemplo si está vacío
-        const { count, error:ce } = await SB.from("clientes").select("*",{count:"exact",head:true});
+        const { error:ce } = await SB.from("clientes").select("id").limit(1);
         if(ce) setDbErr("Lectura: "+ce.message);
-        if((count||0)===0){
-          const r1=await SB.from("clientes").insert(CLIENTES_SEED);
-          const r2=await SB.from("vehiculos").insert(VEHICULOS_SEED);
-          if(r1.error) setDbErr("Guardar: "+r1.error.message);
-          else if(r2.error) setDbErr("Guardar: "+r2.error.message);
-        }
         // asegurar servicios en config
         const cf = await SB.from("config").select("servicios").eq("id",1).single();
         if(cf.data && !cf.data.servicios){ await SB.from("config").update({servicios:SERVICIOS_SEED}).eq("id",1); }
@@ -286,6 +280,7 @@ function App({demoRole}={}){
   const delCliente = (id) => { setClientes(p=>p.filter(c=>c.id!==id)); setVehiculos(p=>p.filter(v=>v.clienteId!==id)); rep(SB.from("clientes").delete().eq("id",id)); rep(SB.from("vehiculos").delete().eq("cliente_id",id)); };
   const addGasto = (monto,motivo) => { const gm={id:uid(),monto:Number(monto)||0,motivo:(motivo||"").trim(),fecha:Date.now()}; setGastos(p=>[gm,...p]); rep(SB.from("gastos").insert(gm)); };
   const delGasto = (id) => { setGastos(p=>p.filter(x=>x.id!==id)); rep(SB.from("gastos").delete().eq("id",id)); };
+  const resetDatos = () => { setClientes([]); setVehiculos([]); setOrders([]); setGastos([]); rep(SB.from("clientes").delete().neq("id","")); rep(SB.from("vehiculos").delete().neq("id","")); rep(SB.from("orders").delete().neq("id","")); rep(SB.from("gastos").delete().neq("id","")); };
 
   const ingresar = (o) => {
     const placa=o.placa.toUpperCase().trim(), phone=(o.whatsapp||"").trim(), name=(o.cliente||"").trim();
@@ -361,7 +356,7 @@ function App({demoRole}={}){
         {T==="tablero" && <Tablero orders={orders} totalOrden={totalOrden} cfg={cfg} role={role} onUpd={updOrder} onDel={delOrder} />}
         {T==="caja" && <Caja orders={orders} totalOrden={totalOrden} cfg={cfg} gastos={gastos} onAddGasto={addGasto} onDelGasto={delGasto} />}
         {T==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} orders={orders} cfg={cfg} onUpd={updCliente} onDel={delCliente} />}
-        {T==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} clientes={clientes} vehiculos={vehiculos} orders={orders} totalOrden={totalOrden} />}
+        {T==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} clientes={clientes} vehiculos={vehiculos} orders={orders} totalOrden={totalOrden} onReset={resetDatos} />}
       </main>
       <div className="text-center text-[11px] text-slate-400 font-bold py-6">Conectado a: {SUPABASE_URL.replace("https://","").split(".")[0]} · v3</div>
       {licOpen && <LicenciaModal cfg={cfg} updateCfg={updateCfg} onClose={()=>setLicOpen(false)} />}
@@ -576,6 +571,11 @@ function Caja({ orders, totalOrden, cfg, gastos, onAddGasto, onDelGasto }){
   const comis={}; hoy.forEach(o=>{ comis[o.lavador]=(comis[o.lavador]||0)+totalOrden(o)*(cfg.comisionPct/100); });
   const [monto,setMonto]=useState(""); const [motivo,setMotivo]=useState("");
   const agregar=()=>{ if(!(Number(monto)>0)) return; onAddGasto(monto,motivo); setMonto(""); setMotivo(""); };
+  const [movOpen,setMovOpen]=useState(false); const [mesSel,setMesSel]=useState(new Date().toISOString().slice(0,7));
+  const movs=[]; pagados.forEach(o=>movs.push({fecha:Number(o.fecha||0),tipo:"ingreso",concepto:(o.placa+" · "+(o.cliente||"")),monto:totalOrden(o),metodo:o.pago.metodo})); (gastos||[]).forEach(g=>movs.push({fecha:Number(g.fecha||0),tipo:"salida",concepto:(g.motivo||"Gasto"),monto:Number(g.monto)||0,metodo:""})); movs.sort((a,b)=>b.fecha-a.fecha);
+  const fmtMov=(ms)=>new Date(ms).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit'})+" "+new Date(ms).toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'});
+  const movMes=movs.filter(m=>m.fecha>=startMonth).map(m=>({...m,fechaTxt:fmtMov(m.fecha)}));
+  const descargarMes=()=>{ if(!mesSel) return; const p=mesSel.split("-"); const y=Number(p[0]),mo=Number(p[1]); const from=new Date(y,mo-1,1).getTime(),to=new Date(y,mo,1).getTime(); const rows=movs.filter(m=>m.fecha>=from&&m.fecha<to).sort((a,b)=>a.fecha-b.fecha).map(m=>({fecha:new Date(m.fecha).toLocaleString('es-EC'),tipo:m.tipo==="ingreso"?"Ingreso":"Salida",concepto:m.concepto,monto:(m.tipo==="ingreso"?"+":"-")+(Number(m.monto)||0).toFixed(2),metodo:m.metodo})); descargar("movimientos-"+mesSel+".csv", csv(rows), "text/csv;charset=utf-8"); };
 
   return (<div className="space-y-4">
     <div className="rounded-2xl p-5 shadow-sm bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
@@ -602,6 +602,27 @@ function Caja({ orders, totalOrden, cfg, gastos, onAddGasto, onDelGasto }){
       {gHoy.length>0 && (<div className="mt-3 space-y-2">{gHoy.map(g=>(<div key={g.id} className="flex items-center gap-2 text-sm"><span className="flex-1 text-slate-600 font-semibold truncate">{g.motivo||"Gasto"}</span><span className="font-extrabold text-rose-500">-{money(g.monto)}</span><button onClick={()=>onDelGasto(g.id)} className="lav-press text-slate-300 hover:text-rose-500"><Ic p={P.trash} size={15}/></button></div>))}</div>)}
     </section>
 
+    <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
+      <button onClick={()=>setMovOpen(o=>!o)} className="w-full flex items-center justify-between">
+        <h2 className="font-extrabold text-slate-700">Movimientos de este mes ({movMes.length})</h2>
+        <span className="text-slate-400 text-lg">{movOpen?"▲":"▼"}</span>
+      </button>
+      {movOpen && (movMes.length===0 ? <p className="text-sm text-slate-400 font-semibold mt-3">Sin movimientos este mes.</p> :
+        <div className="mt-3 space-y-1.5 max-h-72 overflow-y-auto">
+          {movMes.map((m,i)=>(<div key={i} className="flex items-center gap-2 text-sm border-b border-slate-50 pb-1.5">
+            <span className={"w-1.5 h-8 rounded-full shrink-0 "+(m.tipo==="ingreso"?"bg-emerald-400":"bg-rose-400")}/>
+            <div className="flex-1 min-w-0"><p className="font-bold text-slate-600 truncate">{m.concepto}</p><p className="text-[11px] text-slate-400 font-semibold">{m.fechaTxt}{m.metodo?" · "+m.metodo:""}</p></div>
+            <span className={"font-extrabold whitespace-nowrap "+(m.tipo==="ingreso"?"text-emerald-600":"text-rose-500")}>{m.tipo==="ingreso"?"+":"-"}{money(m.monto)}</span>
+          </div>))}
+        </div>)}
+      <div className="mt-3 pt-3 border-t border-slate-100">
+        <p className="text-xs font-bold text-slate-400 mb-2">Descargar otro mes (CSV)</p>
+        <div className="flex gap-2">
+          <input type="month" value={mesSel} onChange={e=>setMesSel(e.target.value)} className="flex-1 rounded-xl border-2 border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500"/>
+          <button onClick={descargarMes} className="lav-press bg-gradient-to-br from-cyan-500 to-blue-600 text-white px-4 rounded-xl font-extrabold text-sm">Descargar</button>
+        </div>
+      </div>
+    </section>
     <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">Métodos de pago (hoy)</h2>{porMetodo.length===0?<p className="text-sm text-slate-400 font-semibold">Aún no hay cobros hoy.</p>:<div className="space-y-2.5">{porMetodo.map(x=>(<div key={x.m} className="flex justify-between items-center text-sm"><span className="text-slate-500 font-semibold">{x.m}</span><span className="font-extrabold text-slate-700">{money(x.total)}</span></div>))}</div>}</section>
     <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4"><h2 className="font-extrabold mb-3 text-slate-700">Comisiones de hoy ({cfg.comisionPct}%)</h2>{Object.keys(comis).length===0?<p className="text-sm text-slate-400 font-semibold">Sin datos.</p>:<div className="space-y-2.5">{Object.entries(comis).map(([l,c])=>(<div key={l} className="flex justify-between items-center text-sm"><span className="text-slate-500 font-semibold flex items-center gap-1.5"><span className="bg-slate-100 p-1 rounded-lg"><Ic p={P.user} size={13}/></span>{l}</span><span className="font-extrabold text-emerald-600">{money(c)}</span></div>))}</div>}</section>
     <p className="text-xs text-slate-400 font-semibold text-center">Los cobros se registran con el botón <b>Cobrar</b> del Tablero.</p>
@@ -664,14 +685,16 @@ function ClienteCard({ c, vehiculos, orders, cfg, onUpd, onDel }){
 }
 
 /* ====== AJUSTES ====== */
-function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden }){
+function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden, onReset }){
   const [nl,setNl]=useState(""); const [nb,setNb]=useState("");
+  const [rst,setRst]=useState(false); const [rstPin,setRstPin]=useState(""); const [rstMsg,setRstMsg]=useState(""); const [rstOk,setRstOk]=useState(false);
   const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500";
   const b=(cfg.licencia&&cfg.licencia.banco)||{}; const setB=(k,v)=>updateCfg({licencia:{...(cfg.licencia||{}), banco:{...b,[k]:v}}});
   const [cd,setCd]=useState(String((cfg.licencia&&cfg.licencia.pinDueno)||"1111")); const [ce,setCe]=useState(String((cfg.licencia&&cfg.licencia.pinEmpleado)||"2222")); const [okClaves,setOkClaves]=useState(false);
   const guardarClaves=()=>{ updateCfg({licencia:{...(cfg.licencia||{}), pinDueno:(cd.trim()||"1111"), pinEmpleado:(ce.trim()||"2222")}}); setOkClaves(true); };
   const red=(cfg.licencia&&cfg.licencia.redes)||{}; const setRed=(k,v)=>updateCfg({licencia:{...(cfg.licencia||{}), redes:{...red,[k]:v}}});
   const jg=(cfg.licencia&&cfg.licencia.juego)||{}; const setJg=(k,v)=>updateCfg({licencia:{...(cfg.licencia||{}), juego:{...jg,[k]:v}}});
+  const doReset=()=>{ const pd=String((cfg.licencia&&cfg.licencia.pinDueno)||"1111"); const pv=String((cfg.licencia&&cfg.licencia.pin)||"6276"); if(rstPin===pd||rstPin===pv){ onReset&&onReset(); setRstOk(true); setRst(false); setRstPin(""); setRstMsg(""); } else setRstMsg("PIN incorrecto"); };
   return (<div className="space-y-4">
     <Sec title="Negocio"><label className="block mb-3"><span className="text-xs font-bold text-slate-400">Nombre</span><input className={inp+" mt-1"} value={cfg.negocio} onChange={e=>updateCfg({negocio:e.target.value})}/></label><label className="block"><span className="text-xs font-bold text-slate-400">Comisión al lavador (%)</span><input className={inp+" mt-1"} type="number" value={cfg.comisionPct} onChange={e=>updateCfg({comisionPct:Number(e.target.value)||0})}/></label></Sec>
     <Sec title="Precios base (Auto/Sedán)"><p className="text-xs text-slate-400 mb-3 font-semibold">Los demás tamaños se calculan solos.</p><div className="space-y-2">{cfg.servicios.map(s=>(<div key={s.id} className="flex items-center gap-2"><span className="flex-1 text-sm font-semibold text-slate-600">{s.nombre}</span><span className="text-slate-400 text-sm font-bold">$</span><input type="number" value={s.base} className="w-20 rounded-xl border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-right outline-none focus:border-blue-500" onChange={e=>updateCfg({servicios:cfg.servicios.map(x=>x.id===s.id?{...x,base:Number(e.target.value)||0}:x)})}/></div>))}</div></Sec>
@@ -729,6 +752,20 @@ function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden }){
         <button onClick={()=>descargar(`clientes-${new Date().toISOString().slice(0,10)}.csv`, csv(clientes.map(c=>({nombre:c.nombre,whatsapp:c.whatsapp,visitas:c.visitas}))), "text/csv;charset=utf-8")} className="lav-press w-full bg-blue-50 border-2 border-blue-100 text-blue-700 font-extrabold py-2.5 rounded-xl text-sm">Clientes (CSV)</button>
         <button onClick={()=>descargar(`cobros-${new Date().toISOString().slice(0,10)}.csv`, csv(orders.filter(o=>o.pago?.pagado).map(o=>({fecha:new Date(Number(o.fecha)).toLocaleString('es-EC'),placa:o.placa,cliente:o.cliente,tipo:o.tipo,total:totalOrden(o),metodo:o.pago?.metodo}))), "text/csv;charset=utf-8")} className="lav-press w-full bg-blue-50 border-2 border-blue-100 text-blue-700 font-extrabold py-2.5 rounded-xl text-sm">Cobros (CSV)</button>
       </div>
+    </Sec>
+    <Sec title="Reiniciar datos (empezar desde cero)">
+      <p className="text-xs text-slate-400 mb-3 font-semibold">Borra clientes, vehículos, cobros y gastos. Se conservan tus precios, lavadores y configuración. Requiere tu PIN.</p>
+      {!rst ? <button onClick={()=>{setRst(true);setRstOk(false);}} className="lav-press w-full border-2 border-rose-200 text-rose-500 font-extrabold py-2.5 rounded-xl">Reiniciar todo</button> : (
+        <div className="space-y-2">
+          <input value={rstPin} onChange={e=>{setRstPin(e.target.value);setRstMsg("");}} inputMode="numeric" type="password" placeholder="PIN del propietario" className={inp}/>
+          {rstMsg && <p className="text-xs font-bold text-rose-500">{rstMsg}</p>}
+          <div className="flex gap-2">
+            <button onClick={()=>{setRst(false);setRstPin("");setRstMsg("");}} className="lav-press flex-1 py-2.5 rounded-xl border-2 border-slate-200 font-bold text-slate-500">Cancelar</button>
+            <button onClick={doReset} className="lav-press flex-1 py-2.5 rounded-xl bg-rose-500 text-white font-extrabold">Sí, borrar todo</button>
+          </div>
+        </div>
+      )}
+      {rstOk && <p className="text-xs font-extrabold text-emerald-600 mt-2 text-center">✓ Datos reiniciados. Empezaste desde cero.</p>}
     </Sec>
   </div>);
 }
