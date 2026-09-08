@@ -49,6 +49,12 @@ body{font-family:'Nunito',system-ui,sans-serif;margin:0;}
 @keyframes segConf{0%{transform:translateY(0) rotate(0);opacity:0}15%{opacity:1}100%{transform:translateY(260px) rotate(320deg);opacity:0}}
 .seg-shake{animation:segShake .5s ease-in-out infinite;}
 @keyframes segShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-2px)}75%{transform:translateX(2px)}}
+.splash-in{animation:splashIn .7s ease both;}
+@keyframes splashIn{0%{opacity:0;transform:translateY(18px) scale(.95)}100%{opacity:1;transform:translateY(0) scale(1)}}
+.splash-logo{animation:splashLogo 2.2s ease-in-out infinite;}
+@keyframes splashLogo{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.splash-dot{animation:splashDot 1s ease-in-out infinite;}
+@keyframes splashDot{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
 </style>
 </head>
 <body class="lav-bg">
@@ -308,7 +314,7 @@ function App({demoRole}={}){
     setTab("tablero");
   };
 
-  if(estado==="cargando") return <Splash msg="Conectando con tu base de datos..." />;
+  if(estado==="cargando") return <SplashInicio negocio={cfg.negocio} />;
   if(estado==="error") return <Splash err msg="No se pudo conectar. Revisa el internet o las credenciales de Supabase." />;
 
   const lic = cfg.licencia||{}; const venc = lic.vencimiento||0;
@@ -335,7 +341,7 @@ function App({demoRole}={}){
             <div className="bg-white/20 p-2 rounded-2xl backdrop-blur"><Ic p={P.drop} size={24}/></div>
             <div className="flex-1 min-w-0"><h1 className="font-extrabold text-xl leading-tight truncate">{cfg.negocio}</h1><p className="text-cyan-50 text-xs font-semibold">Lavado de vehículos · v3</p></div>
           </button>
-          <button onClick={logout} className="lav-press text-white text-xs font-extrabold bg-white/20 px-3 py-1.5 rounded-full whitespace-nowrap">{role==="dueno"?"Dueño":role==="empleado"?"Empleado":"Desarrollador"} · Salir</button>
+          <button onClick={logout} className="lav-press text-white text-xs font-extrabold bg-white/20 px-3 py-1.5 rounded-full whitespace-nowrap">{role==="dueno"?"Propietario":role==="empleado"?"Empleado":"Desarrollador"} · Salir</button>
           {role==="desarrollador" && <button onClick={()=>setLicOpen(true)} aria-hidden="true" tabIndex={-1} className="lav-float-btn absolute right-2 bottom-1 w-7 h-7 rounded-full bg-white/40"></button>}
         </div>
       </header>
@@ -930,6 +936,21 @@ function Seguimiento({id}){
 /* ====== VARIOS ====== */
 function Empty({p,title,msg}){ return (<div className="lav-pop bg-white rounded-2xl border border-blue-50 shadow-sm p-10 text-center"><span className="inline-flex bg-blue-50 text-blue-400 p-4 rounded-2xl mb-3"><Ic p={p} size={32}/></span><h3 className="font-extrabold text-slate-700">{title}</h3><p className="text-sm text-slate-400 mt-1 font-semibold">{msg}</p></div>); }
 function Splash({msg,err}){ return (<div className="lav-bg min-h-screen flex flex-col items-center justify-center gap-3 p-6 text-center"><div className={"p-4 rounded-2xl "+(err?"bg-rose-100 text-rose-500":"bg-blue-100 text-blue-500")}><Ic p={err?P.alert:P.drop} size={36}/></div><p className={"font-extrabold "+(err?"text-rose-500":"text-slate-500")}>{msg}</p></div>); }
+function SplashInicio({negocio}){
+  return (<div className="lav-header min-h-screen flex flex-col items-center justify-center text-white relative overflow-hidden">
+    {[15,35,55,75,88].map((l,i)=>(<span key={i} className="lav-bubble" style={{left:l+"%",width:10+i*4,height:10+i*4,animationDelay:i*0.7+"s"}}/>))}
+    <div className="relative text-center splash-in">
+      <div className="inline-flex bg-white/20 p-6 rounded-3xl backdrop-blur mb-4 splash-logo"><Ic p={P.drop} size={64}/></div>
+      <h1 className="font-extrabold text-3xl leading-tight px-6">{negocio||"Mi Lavadora"}</h1>
+      <p className="text-cyan-50 font-semibold mt-1">Lavado de vehículos</p>
+      <div className="flex justify-center gap-1.5 mt-6">
+        <span className="w-2.5 h-2.5 rounded-full bg-white/80 splash-dot"/>
+        <span className="w-2.5 h-2.5 rounded-full bg-white/80 splash-dot" style={{animationDelay:".2s"}}/>
+        <span className="w-2.5 h-2.5 rounded-full bg-white/80 splash-dot" style={{animationDelay:".4s"}}/>
+      </div>
+    </div>
+  </div>);
+}
 
 const __seguir = new URLSearchParams(window.location.search).get("seguir");
 ReactDOM.createRoot(document.getElementById("root")).render(__seguir ? <Seguimiento id={__seguir} /> : <App/>);
