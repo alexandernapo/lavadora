@@ -301,30 +301,35 @@ function App({demoRole}={}){
   const venderProducto = (p,cantidad) => { const qty=Math.max(1,Number(cantidad)||1); if(qty>(p.stock||0)) return; const total=qty*(Number(p.precio)||0); const venta={id:uid(),producto_id:p.id,nombre:p.nombre,cantidad:qty,precio_unit:p.precio,total,fecha:Date.now()}; setVentas(prev=>[venta,...prev]); rep(SB.from("ventas").insert(venta)); updProducto(p.id,{stock:(p.stock||0)-qty}); };
   const resetDatos = () => { setClientes([]); setVehiculos([]); setOrders([]); setGastos([]); setProductos([]); setVentas([]); rep(SB.from("clientes").delete().neq("id","")); rep(SB.from("vehiculos").delete().neq("id","")); rep(SB.from("orders").delete().neq("id","")); rep(SB.from("gastos").delete().neq("id","")); rep(SB.from("productos").delete().neq("id","")); rep(SB.from("ventas").delete().neq("id","")); };
 
-  const ingresar = (o) => {
+  const ingresar = async (o) => {
     const placa=o.placa.toUpperCase().trim(), phone=(o.whatsapp||"").trim(), name=(o.cliente||"").trim();
     const order={ id:uid(), placa, tipo:o.tipo, marca:o.marca, color:o.color, cliente:name, whatsapp:phone,
       servicios:o.servicios, bahia:o.bahia, lavador:o.lavador, estado:"espera", danos:o.danos, objetos:o.objetos,
       notas:o.notas, pago:{metodo:"Efectivo",monto:0,pagado:false}, fecha:(o.fecha?new Date(o.fecha+"T12:00:00").getTime():Date.now()) };
-    setOrders(p=>[order,...p]); rep(SB.from("orders").insert(order));
+    setOrders(p=>[order,...p]);
 
     let persona = (phone && clientes.find(c=>waNumber(c.whatsapp)&&waNumber(c.whatsapp)===waNumber(phone)))
       || (name && clientes.find(c=>c.nombre.trim().toLowerCase()===name.toLowerCase()));
-    let clienteId;
+    let clienteId, clientePromise;
     if(persona){
       clienteId=persona.id;
       const upd={...persona, nombre:name||persona.nombre, whatsapp:phone||persona.whatsapp, visitas:(persona.visitas||0)+1, ultima:Date.now()};
-      setClientes(clientes.map(c=>c.id===persona.id?upd:c)); rep(SB.from("clientes").upsert(upd));
+      setClientes(clientes.map(c=>c.id===persona.id?upd:c)); clientePromise=SB.from("clientes").upsert(upd);
     } else {
       clienteId=uid();
       const nuevo={id:clienteId, nombre:name, whatsapp:phone, visitas:1, ultima:Date.now()};
-      setClientes([...clientes,nuevo]); rep(SB.from("clientes").insert(nuevo));
+      setClientes([...clientes,nuevo]); clientePromise=SB.from("clientes").insert(nuevo);
     }
     const ex = vehiculos.find(v=>v.placa===placa);
     const veh = ex ? {...ex, tipo:o.tipo, marca:o.marca||ex.marca, color:o.color||ex.color, clienteId}
                    : {id:uid(), placa, tipo:o.tipo, marca:o.marca, color:o.color, clienteId};
     setVehiculos(ex ? vehiculos.map(v=>v.id===ex.id?veh:v) : [...vehiculos,veh]);
-    rep(SB.from("vehiculos").upsert(vehToDb(veh)));
+    const vehiculoPromise = SB.from("vehiculos").upsert(vehToDb(veh));
+    const orderPromise = SB.from("orders").insert(order);
+    // esperamos a que TODO quede confirmado en la base antes de continuar,
+    // para que al compartir el link ya exista de verdad (evita perderlo si se cierra la app rápido)
+    const results = await Promise.all([orderPromise, clientePromise, vehiculoPromise]);
+    results.forEach(r=>{ if(r&&r.error) setDbErr(r.error.message||JSON.stringify(r.error)); });
     setTab("tablero");
   };
 
@@ -461,7 +466,7 @@ function Inicio({ setTab, cfg, orders, totalOrden, allowed }){
 /* ====== RECEPCIÓN ====== */
 function Recepcion({ cfg, clientes, vehiculos, tipoMult, onAdd }){
   const vacio={ placa:"",tipo:"auto",marca:"",color:"",cliente:"",whatsapp:"",servicios:[],bahia:cfg.bahias[0]||"",lavador:cfg.lavadores[0]||"",danos:[],objetos:"",notas:"",fecha:new Date().toISOString().slice(0,10) };
-  const [f,setF]=useState(vacio); const [err,setErr]=useState(""); const [openSug,setOpenSug]=useState(null);
+  const [f,setF]=useState(vacio); const [err,setErr]=useState(""); const [openSug,setOpenSug]=useState(null); const [guardando,setGuardando]=useState(false);
   const set=(k,v)=>{ setF(p=>({...p,[k]:v})); if(err)setErr(""); };
   const mult=tipoMult(f.tipo);
   const total=f.servicios.reduce((a,sid)=>{ const s=cfg.servicios.find(x=>x.id===sid); return a+(s?precioServicio(s,mult):0); },0);
@@ -473,7 +478,7 @@ function Recepcion({ cfg, clientes, vehiculos, tipoMult, onAdd }){
   const elegirCliente=(c)=>{ setF(p=>({...p,cliente:c.nombre,whatsapp:c.whatsapp||""})); setOpenSug(null); };
   const phoneN=waNumber(f.whatsapp);
   const persona=(phoneN&&clientes.find(c=>waNumber(c.whatsapp)===phoneN))||(f.cliente.trim()&&clientes.find(c=>c.nombre.trim().toLowerCase()===f.cliente.trim().toLowerCase()));
-  const submit=()=>{ if(!f.placa.trim())return setErr("Ingresa la placa del vehículo."); if(f.servicios.length===0)return setErr("Selecciona al menos un servicio."); onAdd(f); setF(vacio); setErr(""); };
+  const submit=async()=>{ if(!f.placa.trim())return setErr("Ingresa la placa del vehículo."); if(f.servicios.length===0)return setErr("Selecciona al menos un servicio."); setGuardando(true); try{ await onAdd(f); setF(vacio); setErr(""); } finally { setGuardando(false); } };
   const inp="mt-1 w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold focus:border-blue-500 outline-none transition-colors";
 
   return (
@@ -527,7 +532,7 @@ function Recepcion({ cfg, clientes, vehiculos, tipoMult, onAdd }){
       </Sec>
 
       {err&&<p className="text-sm font-bold text-rose-500 text-center bg-rose-50 rounded-xl py-2">{err}</p>}
-      <button onClick={submit} className="lav-press w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-blue-200"><Ic p={P.plus} size={22}/> Ingresar vehículo · {money(total)}</button>
+      <button onClick={submit} disabled={guardando} className="lav-press w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-60">{guardando?"Guardando...":(<><Ic p={P.plus} size={22}/> Ingresar vehículo · {money(total)}</>)}</button>
     </div>
   );
 }
