@@ -385,16 +385,14 @@ function App({demoRole}={}){
   const agregarProductoAOrden = (p,cantidad,orderId) => { const qty=Math.max(1,Number(cantidad)||1); if(qty>(p.stock||0)) return; const order=orders.find(o=>o.id===orderId); if(!order) return; const item={producto_id:p.id,nombre:p.nombre,cantidad:qty,precio_unit:p.precio}; updOrder(orderId,{productos:[...(order.productos||[]),item]}); updProducto(p.id,{stock:(p.stock||0)-qty}); };
   const resetDatos = () => { setClientes([]); setVehiculos([]); setOrders([]); setGastos([]); setProductos([]); setVentas([]); rep(SB.from("clientes").delete().neq("id","")); rep(SB.from("vehiculos").delete().neq("id","")); rep(SB.from("orders").delete().neq("id","")); rep(SB.from("gastos").delete().neq("id","")); rep(SB.from("productos").delete().neq("id","")); rep(SB.from("ventas").delete().neq("id","")); };
   const resetOrders = () => { setOrders([]); rep(SB.from("orders").delete().neq("id","")); };
-  const crearLavadoManual = (cliente) => {
+  const crearLavadoManual = (cliente, detalles) => {
     const veh = vehiculos.find(v=>v.clienteId===cliente.id);
-    const tipo = veh?veh.tipo:"auto";
-    const expressSvc = cfg.servicios.find(s=>s.id==="express" && servicioDisponiblePara(s,tipo)) || cfg.servicios.find(s=>servicioDisponiblePara(s,tipo)) || cfg.servicios[0];
-    const monto = expressSvc ? precioServicio(expressSvc,tipo) : 0;
+    const tipo = (detalles&&detalles.tipo) || (veh?veh.tipo:"auto");
     const order = { id:uid(), placa:veh?veh.placa:"—", tipo, marca:veh?veh.marca:"", color:veh?veh.color:"",
-      cliente:cliente.nombre||"", whatsapp:cliente.whatsapp||"", servicios:expressSvc?[expressSvc.id]:[],
+      cliente:cliente.nombre||"", whatsapp:cliente.whatsapp||"", servicios:(detalles&&detalles.servicios)||[],
       bahia:cfg.bahias[0]||"", lavador:cfg.lavadores[0]||"", estado:"entregado", danos:[], objetos:"",
       notas:"Lavado agregado manualmente (registro histórico)", productos:[],
-      pago:{metodo:"Efectivo",monto,pagado:true}, fecha:Date.now() };
+      pago:{metodo:"Efectivo",monto:Number(detalles&&detalles.monto)||0,pagado:true}, fecha:(detalles&&detalles.fecha)||Date.now() };
     setOrders(p=>[order,...p]); rep(SB.from("orders").insert(order));
     return order.id;
   };
@@ -936,8 +934,8 @@ function Clientes({ clientes, vehiculos, orders, cfg, totalOrden, onUpd, onDel, 
   </div>);
 }
 
-function HistorialRow({ rec, cfg, onUpdOrder, autoOpen }){
-  const [open,setOpen]=useState(!!autoOpen); const [servSel,setServSel]=useState(rec.servicios); const [monto,setMonto]=useState(rec.monto);
+function HistorialRow({ rec, cfg, onUpdOrder }){
+  const [open,setOpen]=useState(false); const [servSel,setServSel]=useState(rec.servicios); const [monto,setMonto]=useState(rec.monto);
   const [tipoSel,setTipoSel]=useState(rec.tipo);
   const d0=new Date(rec.fecha);
   const [fechaSel,setFechaSel]=useState(d0.toISOString().slice(0,10));
@@ -985,8 +983,49 @@ function HistorialRow({ rec, cfg, onUpdOrder, autoOpen }){
   </div>);
 }
 
+function NuevoLavadoForm({ misVeh, cfg, onCrear, onCancel }){
+  const vehDefault = misVeh[0];
+  const [tipoSel,setTipoSel]=useState(vehDefault?vehDefault.tipo:"auto");
+  const disponibles = cfg.servicios.filter(s=>servicioDisponiblePara(s,tipoSel));
+  const defaultSvc = disponibles.find(s=>s.id==="express") || disponibles[0];
+  const [servSel,setServSel]=useState(defaultSvc?[defaultSvc.id]:[]);
+  const [monto,setMonto]=useState(defaultSvc?precioServicio(defaultSvc,tipoSel):0);
+  const now=new Date();
+  const [fechaSel,setFechaSel]=useState(now.toISOString().slice(0,10));
+  const [horaSel,setHoraSel]=useState(now.toTimeString().slice(0,5));
+  const toggle=(sid)=>setServSel(cur=>cur.includes(sid)?cur.filter(x=>x!==sid):[...cur,sid]);
+  useEffect(()=>{ setServSel(cur=>cur.filter(sid=>disponibles.some(s=>s.id===sid))); },[tipoSel]);
+  const guardar=()=>{
+    const fecha=(fechaSel&&horaSel)?new Date(fechaSel+"T"+horaSel+":00").getTime():Date.now();
+    onCrear({ tipo:tipoSel, servicios:servSel, monto:Number(monto)||0, fecha });
+  };
+  return (<div className="mt-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl p-3 space-y-2 lav-pop">
+    <p className="text-xs font-extrabold text-amber-700">Agregar lavado faltante</p>
+    <p className="text-[11px] font-bold text-slate-500">Tipo de vehículo</p>
+    <div className="flex flex-wrap gap-1.5">
+      {TIPOS.map(t=>{ const on=tipoSel===t.id;
+        return (<button key={t.id} onClick={()=>setTipoSel(t.id)} className={"lav-press flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border-2 "+(on?"border-blue-500 bg-blue-50 text-blue-700":"border-slate-200 text-slate-400 bg-white")}><Ic p={t.pth} size={12}/>{t.label}</button>); })}
+    </div>
+    <p className="text-[11px] font-bold text-slate-500 mt-1">Tipo de lavado</p>
+    <div className="flex flex-wrap gap-1.5">
+      {disponibles.map(s=>{ const on=servSel.includes(s.id);
+        return (<button key={s.id} onClick={()=>toggle(s.id)} className={"lav-press px-2 py-1 rounded-lg text-[11px] font-bold border-2 "+(on?"border-blue-500 bg-blue-50 text-blue-700":"border-slate-200 text-slate-400 bg-white")}>{s.nombre}</button>); })}
+      {disponibles.length===0 && <p className="text-[11px] text-slate-400 font-semibold">Sin servicios configurados para este tipo.</p>}
+    </div>
+    <div className="grid grid-cols-2 gap-2 mt-1">
+      <label className="block"><span className="text-[11px] font-bold text-slate-500">Fecha</span><input type="date" value={fechaSel} onChange={e=>setFechaSel(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold outline-none focus:border-blue-500"/></label>
+      <label className="block"><span className="text-[11px] font-bold text-slate-500">Hora</span><input type="time" value={horaSel} onChange={e=>setHoraSel(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold outline-none focus:border-blue-500"/></label>
+    </div>
+    <label className="block"><span className="text-[11px] font-bold text-slate-500">Monto cobrado $</span><input type="number" value={monto} onChange={e=>setMonto(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-center outline-none focus:border-blue-500"/></label>
+    <div className="flex gap-2 mt-1">
+      <button onClick={onCancel} className="lav-press flex-1 py-2 rounded-lg border-2 border-slate-200 font-bold text-slate-500 text-xs bg-white">Cancelar</button>
+      <button onClick={guardar} className="lav-press flex-1 py-2 rounded-lg bg-amber-500 text-white font-extrabold text-xs">Guardar lavado</button>
+    </div>
+  </div>);
+}
+
 function ClienteCard({ c, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUpdOrder, onCrearLavado }){
-  const [edit,setEdit]=useState(false); const [del,setDel]=useState(false); const [histOpen,setHistOpen]=useState(false); const [autoAbrir,setAutoAbrir]=useState(null);
+  const [edit,setEdit]=useState(false); const [del,setDel]=useState(false); const [histOpen,setHistOpen]=useState(false); const [faltanteOpen,setFaltanteOpen]=useState(false);
   const [f,setF]=useState({nombre:c.nombre||"", whatsapp:c.whatsapp||"", visitas:c.visitas||0});
   const misVeh=vehiculos.filter(v=>v.clienteId===c.id);
   const hist=historialCliente(c,orders,cfg,totalOrden);
@@ -1018,16 +1057,17 @@ function ClienteCard({ c, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUp
     </button>
     {histOpen && (<div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
       {hist.length===0 ? <p className="text-xs text-slate-400 font-semibold">Sin lavados registrados aún.</p> :
-        hist.map(rec=><HistorialRow key={rec.id} rec={rec} cfg={cfg} onUpdOrder={onUpdOrder} autoOpen={rec.id===autoAbrir}/>)}
+        hist.map(rec=><HistorialRow key={rec.id} rec={rec} cfg={cfg} onUpdOrder={onUpdOrder}/>)}
     </div>)}
     {(c.visitas||0)!==visitasReales && (<div className="mt-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl p-2.5">
       <div className="flex items-center gap-2"><Ic p={P.alert} size={14} className="text-amber-500 shrink-0"/>
         <p className="flex-1 text-[11px] font-bold text-amber-700">Visitas registradas: {c.visitas||0} · Lavados reales: {visitasReales}</p>
       </div>
-      <div className="flex gap-1.5 mt-2">
-        {(c.visitas||0)>visitasReales && <button onClick={()=>{ const id=onCrearLavado(c); setAutoAbrir(id); setHistOpen(true); }} className="lav-press flex-1 bg-amber-500 text-white text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg whitespace-nowrap">+ Agregar lavado faltante</button>}
+      {!faltanteOpen && (<div className="flex gap-1.5 mt-2">
+        {(c.visitas||0)>visitasReales && <button onClick={()=>setFaltanteOpen(true)} className="lav-press flex-1 bg-amber-500 text-white text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg whitespace-nowrap">+ Agregar lavado faltante</button>}
         <button onClick={()=>onUpd(c.id,{visitas:visitasReales})} className="lav-press flex-1 bg-white border-2 border-amber-300 text-amber-600 text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg whitespace-nowrap">Corregir a {visitasReales}</button>
-      </div>
+      </div>)}
+      {faltanteOpen && <NuevoLavadoForm misVeh={misVeh} cfg={cfg} onCancel={()=>setFaltanteOpen(false)} onCrear={(detalles)=>{ onCrearLavado(c,detalles); setFaltanteOpen(false); setHistOpen(true); }} />}
     </div>)}
     <div className="grid grid-cols-3 gap-1.5 mt-3">
       <a href={wa} target="_blank" rel="noreferrer" className="lav-press bg-emerald-50 text-emerald-600 border-2 border-emerald-100 text-xs font-extrabold py-2 rounded-xl flex items-center justify-center gap-1"><Ic p={P.msg} size={14}/> Promo</a>
