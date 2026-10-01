@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Lavado de Vehículos</title>
 <link rel="manifest" href="manifest.webmanifest" />
-<meta name="theme-color" content="#2563eb" />
+<meta name="theme-color" content="#0b1226" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
@@ -56,6 +56,78 @@ body{font-family:'Nunito',system-ui,sans-serif;margin:0;}
 @keyframes splashLogo{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
 .splash-dot{animation:splashDot 1s ease-in-out infinite;}
 @keyframes splashDot{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+
+/* ====== TEMA: vidrio esmerilado azul/negro ====== */
+.lav-bg{
+  background:
+    radial-gradient(1100px 560px at 12% -8%, rgba(37,99,235,.28), transparent 60%),
+    radial-gradient(900px 520px at 108% 12%, rgba(14,165,233,.20), transparent 55%),
+    radial-gradient(700px 480px at 50% 110%, rgba(99,102,241,.16), transparent 60%),
+    linear-gradient(180deg,#060a16 0%,#0b1226 45%,#070b18 100%) !important;
+}
+.lav-header{
+  background: linear-gradient(120deg, rgba(15,23,42,.92) 0%, rgba(30,58,138,.85) 55%, rgba(29,78,216,.82) 100%) !important;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.lav-root{ color:#e2e8f0; }
+/* Tarjetas / superficies -> vidrio esmerilado con sombra "levantada" */
+.lav-root .bg-white{ background: rgba(255,255,255,0.06) !important; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 12px 32px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.05) inset !important; }
+.lav-root .bg-white\/80{ background: rgba(10,15,30,.55) !important; backdrop-filter: blur(14px); }
+.lav-root .bg-white\/50{ background: rgba(255,255,255,.06) !important; }
+.lav-root .bg-white\/95{ background: rgba(10,15,30,.85) !important; backdrop-filter: blur(14px); }
+.lav-root .bg-slate-50{ background: rgba(255,255,255,.045) !important; }
+.lav-root .bg-slate-50\/60{ background: rgba(255,255,255,.04) !important; }
+.lav-root .bg-slate-100{ background: rgba(255,255,255,.07) !important; }
+.lav-root .bg-blue-50{ background: rgba(59,130,246,.14) !important; }
+.lav-root .bg-amber-50{ background: rgba(245,158,11,.12) !important; }
+.lav-root .bg-emerald-50{ background: rgba(16,185,129,.12) !important; }
+.lav-root .bg-rose-50{ background: rgba(244,63,94,.12) !important; }
+.lav-root .bg-teal-100{ background: rgba(20,184,166,.18) !important; }
+.lav-root .bg-indigo-100{ background: rgba(99,102,241,.18) !important; }
+.lav-root .bg-cyan-100{ background: rgba(6,182,212,.18) !important; }
+.lav-root .bg-sky-100{ background: rgba(14,165,233,.18) !important; }
+.lav-root .bg-blue-100{ background: rgba(59,130,246,.18) !important; }
+.lav-root .bg-amber-100{ background: rgba(245,158,11,.18) !important; }
+.lav-root .bg-emerald-100{ background: rgba(16,185,129,.18) !important; }
+/* Bordes -> translúcidos suaves */
+.lav-root .border-blue-50,
+.lav-root .border-slate-100,
+.lav-root .border-slate-200,
+.lav-root .border-blue-100{ border-color: rgba(255,255,255,.10) !important; }
+.lav-root .border-amber-200{ border-color: rgba(245,158,11,.35) !important; }
+.lav-root .border-emerald-200{ border-color: rgba(16,185,129,.35) !important; }
+.lav-root .border-rose-100,.lav-root .border-rose-200{ border-color: rgba(244,63,94,.35) !important; }
+.lav-root .border-amber-100{ border-color: rgba(245,158,11,.25) !important; }
+.lav-root .border-emerald-100{ border-color: rgba(16,185,129,.25) !important; }
+/* Texto -> claro para legibilidad sobre vidrio oscuro */
+.lav-root .text-slate-700,.lav-root .text-slate-800{ color:#eef2f9 !important; }
+.lav-root .text-slate-600{ color:#cdd6e4 !important; }
+.lav-root .text-slate-500{ color:#a3afc2 !important; }
+.lav-root .text-slate-400{ color:#7c8aa3 !important; }
+.lav-root .text-slate-300{ color:#5c6a82 !important; }
+.lav-root .text-blue-600,.lav-root .text-blue-700{ color:#60a5fa !important; }
+.lav-root .text-blue-500{ color:#7cb4fb !important; }
+.lav-root .text-emerald-600,.lav-root .text-emerald-700{ color:#34d399 !important; }
+.lav-root .text-amber-500,.lav-root .text-amber-600,.lav-root .text-amber-700{ color:#fbbf24 !important; }
+.lav-root .text-rose-500,.lav-root .text-rose-600{ color:#fb7185 !important; }
+.lav-root .text-violet-600{ color:#a78bfa !important; }
+.lav-root .text-teal-600{ color:#2dd4bf !important; }
+.lav-root .text-indigo-600{ color:#818cf8 !important; }
+.lav-root .text-cyan-600,.lav-root .text-sky-700{ color:#38bdf8 !important; }
+/* Sombras de color -> brillo tipo "glow" en vez de halo claro */
+.lav-root .shadow-blue-200{ box-shadow:0 12px 30px rgba(37,99,235,.45) !important; }
+.lav-root .shadow-emerald-200{ box-shadow:0 10px 26px rgba(16,185,129,.4) !important; }
+/* Inputs/selects -> vidrio también */
+.lav-root input, .lav-root select, .lav-root textarea{
+  background: rgba(255,255,255,.055) !important;
+  color:#eef2f9 !important;
+}
+.lav-root input::placeholder, .lav-root textarea::placeholder{ color:#64748b !important; }
+.lav-root option{ color:#0f172a; }
+/* Nav inferior y tarjetas "selected" con fondo degradado se mantienen vívidas */
+.lav-root .bg-slate-800{ background: rgba(255,255,255,.10) !important; backdrop-filter: blur(10px); }
+.lav-root .bg-slate-900{ background: rgba(2,6,23,.6) !important; }
 </style>
 </head>
 <body class="lav-bg">
@@ -377,7 +449,7 @@ function App({demoRole}={}){
           {role==="desarrollador" && <button onClick={()=>setLicOpen(true)} aria-hidden="true" tabIndex={-1} className="lav-float-btn absolute right-2 bottom-1 w-7 h-7 rounded-full bg-white/40"></button>}
         </div>
       </header>
-      {T!=="inicio" && <nav className="bg-white/80 backdrop-blur border-b border-blue-100 sticky top-[68px] z-10">
+      {T!=="inicio" && <nav className="bg-white/80 backdrop-blur border-b border-blue-100 sticky top-[68px] z-10" style={{background:"rgba(8,12,26,.55)",borderBottomColor:"rgba(255,255,255,.08)"}}>
         <div className="max-w-6xl mx-auto px-2 py-2 flex gap-1">
           {tabs.map(t=>{ const on=T===t.id;
             return (<button key={t.id} onClick={()=>setTab(t.id)} className={"lav-press flex-1 flex flex-col items-center justify-center gap-1 py-2 px-0.5 rounded-xl text-[11px] sm:text-sm font-bold transition-colors "+(on?"bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow":"text-slate-500")}>
@@ -1239,7 +1311,7 @@ function EscenaCarro({estado}){
   const drops=estado==="lavado"; const wind=estado==="secado"; const vac=estado==="aspirado";
   const spark=estado==="detallado"||estado==="encerado"; const shine=estado==="detallado"||estado==="encerado"; const done=estado==="listo"||estado==="entregado";
   const info={espera:["En espera 🅿️","Tu vehículo está en cola"],lavado:["Lavando 💧","Enjabonando y enjuagando"],secado:["Secando 💨","Quitando el agua"],aspirado:["Aspirando 🌀","Limpiando el interior"],detallado:["Detallando ✨","Puliendo los detalles"],encerado:["Encerando ✨","Aplicando cera y brillo"],listo:["¡Listo! 🎉","Puedes pasar a retirarlo"],entregado:["Entregado ✓","¡Gracias por tu preferencia!"]}[estado]||["",""];
-  return (<div className="relative rounded-2xl overflow-hidden border border-blue-100" style={{height:240,background:"linear-gradient(180deg,#dbeafe 0%,#eff6ff 60%,#f8fafc 100%)"}}>
+  return (<div className="relative rounded-2xl overflow-hidden border border-blue-100" style={{height:240,background:"linear-gradient(180deg, rgba(30,41,59,.7) 0%, rgba(15,23,42,.6) 55%, rgba(8,12,26,.55) 100%)"}}>
     <div className="absolute top-4 inset-x-0 text-center px-3">
       <p className="font-extrabold text-blue-700 text-lg leading-tight">{info[0]}</p>
       <p className="text-xs font-semibold text-blue-500">{info[1]}</p>
@@ -1252,7 +1324,8 @@ function EscenaCarro({estado}){
     {done && [...Array(10)].map((_,i)=>(<span key={i} className="seg-confetti" style={{left:(8+i*9)+"%",background:["#22d3ee","#3b82f6","#10b981","#f59e0b","#8b5cf6"][i%5],animationDelay:(i*0.12)+"s"}}/>))}
     <div className="absolute inset-x-0 bottom-6 flex justify-center">
       <div className={"relative "+(done?"seg-bob":(wind?"seg-shake":""))}>
-        <img src={CAR_IMG} alt="carro" style={{width:200,filter:"drop-shadow(0 10px 12px rgba(37,99,235,.28))"}}/>
+        <div className="absolute rounded-2xl" style={{width:216,height:128,left:"50%",top:6,transform:"translateX(-50%)",background:"rgba(255,255,255,.12)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",boxShadow:"0 14px 34px rgba(0,0,0,.4), 0 1px 0 rgba(255,255,255,.08) inset",border:"1px solid rgba(255,255,255,.14)"}}/>
+        <img src={CAR_IMG} alt="carro" style={{width:200,position:"relative",filter:"drop-shadow(0 10px 14px rgba(0,0,0,.5))"}}/>
         {shine && <span className="seg-shine"/>}
         {done && <span className="absolute -top-2 -right-2 bg-emerald-500 text-white rounded-full p-1.5 shadow"><Ic p={P.check} size={18}/></span>}
       </div>
