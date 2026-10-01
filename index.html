@@ -384,6 +384,19 @@ function App({demoRole}={}){
   const venderProducto = (p,cantidad,clienteNombre) => { const qty=Math.max(1,Number(cantidad)||1); if(qty>(p.stock||0)) return; const total=qty*(Number(p.precio)||0); const venta={id:uid(),producto_id:p.id,nombre:p.nombre,cantidad:qty,precio_unit:p.precio,total,cliente:(clienteNombre||"").trim(),fecha:Date.now()}; setVentas(prev=>[venta,...prev]); rep(SB.from("ventas").insert(venta)); updProducto(p.id,{stock:(p.stock||0)-qty}); };
   const agregarProductoAOrden = (p,cantidad,orderId) => { const qty=Math.max(1,Number(cantidad)||1); if(qty>(p.stock||0)) return; const order=orders.find(o=>o.id===orderId); if(!order) return; const item={producto_id:p.id,nombre:p.nombre,cantidad:qty,precio_unit:p.precio}; updOrder(orderId,{productos:[...(order.productos||[]),item]}); updProducto(p.id,{stock:(p.stock||0)-qty}); };
   const resetDatos = () => { setClientes([]); setVehiculos([]); setOrders([]); setGastos([]); setProductos([]); setVentas([]); rep(SB.from("clientes").delete().neq("id","")); rep(SB.from("vehiculos").delete().neq("id","")); rep(SB.from("orders").delete().neq("id","")); rep(SB.from("gastos").delete().neq("id","")); rep(SB.from("productos").delete().neq("id","")); rep(SB.from("ventas").delete().neq("id","")); };
+  const crearLavadoManual = (cliente) => {
+    const veh = vehiculos.find(v=>v.clienteId===cliente.id);
+    const tipo = veh?veh.tipo:"auto";
+    const expressSvc = cfg.servicios.find(s=>s.id==="express" && servicioDisponiblePara(s,tipo)) || cfg.servicios.find(s=>servicioDisponiblePara(s,tipo)) || cfg.servicios[0];
+    const monto = expressSvc ? precioServicio(expressSvc,tipo) : 0;
+    const order = { id:uid(), placa:veh?veh.placa:"—", tipo, marca:veh?veh.marca:"", color:veh?veh.color:"",
+      cliente:cliente.nombre||"", whatsapp:cliente.whatsapp||"", servicios:expressSvc?[expressSvc.id]:[],
+      bahia:cfg.bahias[0]||"", lavador:cfg.lavadores[0]||"", estado:"entregado", danos:[], objetos:"",
+      notas:"Lavado agregado manualmente (registro histórico)", productos:[],
+      pago:{metodo:"Efectivo",monto,pagado:true}, fecha:Date.now() };
+    setOrders(p=>[order,...p]); rep(SB.from("orders").insert(order));
+    return order.id;
+  };
 
   const ingresar = async (o) => {
     const placa=o.placa.toUpperCase().trim(), phone=(o.whatsapp||"").trim(), name=(o.cliente||"").trim();
@@ -463,7 +476,7 @@ function App({demoRole}={}){
         {T==="recepcion" && <Recepcion cfg={cfg} clientes={clientes} vehiculos={vehiculos} tipoMult={tipoMult} onAdd={ingresar} />}
         {T==="tablero" && <Tablero orders={orders} totalOrden={totalOrden} cfg={cfg} role={role} onUpd={updOrder} onDel={delOrder} />}
         {T==="caja" && <Caja orders={orders} totalOrden={totalOrden} cfg={cfg} gastos={gastos} ventas={ventas} onAddGasto={addGasto} onDelGasto={delGasto} />}
-        {T==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} orders={orders} cfg={cfg} totalOrden={totalOrden} onUpd={updCliente} onDel={delCliente} onUpdOrder={updOrder} />}
+        {T==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} orders={orders} cfg={cfg} totalOrden={totalOrden} onUpd={updCliente} onDel={delCliente} onUpdOrder={updOrder} onCrearLavado={crearLavadoManual} />}
         {T==="tienda" && <Tienda productos={productos} orders={orders} ventas={ventas} onAdd={addProducto} onUpd={updProducto} onDel={delProducto} onMove={moveProducto} onVenderDirecta={venderProducto} onAgregarAVehiculo={agregarProductoAOrden} />}
         {T==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} clientes={clientes} vehiculos={vehiculos} orders={orders} totalOrden={totalOrden} onReset={resetDatos} />}
       </main>
@@ -647,7 +660,8 @@ function Card({ o, total, cfg, role, onUpd, onDel }){
   const seq=etapasDeOrden(o,cfg.servicios); const idx=Math.max(0,seq.indexOf(o.estado)); const tipo=tipoOf(o.tipo); const st=EST[o.estado]||EST.listo;
   const etLabel=(ESTADOS.find(e=>e.id===o.estado)||{}).label||o.estado;
   const [payOpen,setPayOpen]=useState(false); const [delOpen,setDelOpen]=useState(false); const [copiado,setCopiado]=useState(false); const [aplicarDesc,setAplicarDesc]=useState(false);
-  const descPct=Number((cfg.licencia&&cfg.licencia.descuentoPct)||0);
+  const [descPctLocal,setDescPctLocal]=useState(Number((cfg.licencia&&cfg.licencia.descuentoPct)||10));
+  const descPct=descPctLocal;
   const totalConDesc=(aplicarDesc&&descPct>0)?Math.round(total*(1-descPct/100)*100)/100:total;
   const move=(d)=>{ const n=seq[idx+d]; if(n)onUpd(o.id,{estado:n}); };
   const seg=window.location.origin+window.location.pathname+"?seguir="+o.id;
@@ -684,11 +698,12 @@ function Card({ o, total, cfg, role, onUpd, onDel }){
         {o.pago?.pagado&&<span className="bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.ok} size={11}/>{o.pago.metodo}</span>}
         {o.pago?.pagado&&o.pago?.descuentoPct>0&&<span className="bg-amber-100 text-amber-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.gift} size={11}/>cupón -{o.pago.descuentoPct}%</span>}
         <a href={waHref} target="_blank" rel="noreferrer" className="lav-press bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.msg} size={11}/> Enviar link</a>
+        {o.estado==="listo"&&<a href={`https://wa.me/${waNumber(o.whatsapp)}?text=${encodeURIComponent(listoMsg)}`} target="_blank" rel="noreferrer" className="lav-cta lav-press bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.gift} size={11}/> Avisar listo</a>}
       </div>
       {o.danos?.length>0&&<p className="text-xs text-amber-500 mt-2 flex items-start gap-1 font-bold"><Ic p={P.alert} size={12} className="mt-0.5 shrink-0"/> {o.danos.join(", ")}</p>}
       {o.productos?.length>0&&(<div className="flex flex-wrap gap-1 mt-2">{o.productos.map((it,i)=>(<span key={i} className="bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg px-2 py-0.5 text-[11px] font-bold flex items-center gap-1"><Ic p={P.box} size={10}/>{it.nombre} x{it.cantidad}</span>))}</div>)}
       {payOpen&&(<div className="lav-pop mt-2.5 bg-slate-50 border-2 border-slate-100 rounded-xl p-2.5">
-        {descPct>0 && (<label className="flex items-center gap-2 mb-2 cursor-pointer"><input type="checkbox" checked={aplicarDesc} onChange={e=>setAplicarDesc(e.target.checked)} className="w-4 h-4"/><span className="text-xs font-bold text-slate-600">Aplicar descuento tarjeta (-{descPct}%)</span></label>)}
+        <label className="flex items-center gap-2 mb-2 cursor-pointer"><input type="checkbox" checked={aplicarDesc} onChange={e=>setAplicarDesc(e.target.checked)} className="w-4 h-4"/><span className="text-xs font-bold text-slate-600">Aplicar descuento tarjeta</span><input type="number" value={descPctLocal} onChange={e=>setDescPctLocal(Number(e.target.value)||0)} className="w-14 rounded-lg border-2 border-slate-200 px-1.5 py-1 text-xs font-bold text-center outline-none focus:border-blue-500"/><span className="text-xs font-bold text-slate-400">%</span></label>
         <p className="text-xs font-bold text-slate-500 mb-2 text-center">Cobrar {money(totalConDesc)} con:{aplicarDesc&&descPct>0&&<span className="block text-[11px] text-emerald-600 font-bold">({money(total)} − {descPct}% descuento)</span>}</p>
         <div className="grid grid-cols-2 gap-1.5">{METODOS.map(m=>(<button key={m} onClick={()=>cobrar(m)} className="lav-press bg-white border-2 border-slate-200 hover:border-blue-400 rounded-lg py-2 text-xs font-extrabold text-slate-600">{m}</button>))}</div>
         <button onClick={()=>{setPayOpen(false);setAplicarDesc(false);}} className="w-full text-xs font-bold text-slate-400 mt-2">Cancelar</button>
@@ -771,6 +786,8 @@ function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto 
   const ingresosHoy=sum(hoy)+ventasHoy, ingresosSemana=sum(semana)+ventasSemana, ingresosMes=sum(mes)+ventasMes;
   const porMetodo=METODOS.map(m=>({m,total:hoy.filter(o=>o.pago.metodo===m).reduce((a,o)=>a+totalOrden(o),0)})).filter(x=>x.total>0);
   const comis={}; hoy.forEach(o=>{ comis[o.lavador]=(comis[o.lavador]||0)+totalOrden(o)*(cfg.comisionPct/100); });
+  const vehiculosHoy=orders.filter(o=>Number(o.fecha||0)>=startToday).slice().sort((a,b)=>Number(a.fecha||0)-Number(b.fecha||0));
+  const [vehHoyOpen,setVehHoyOpen]=useState(true);
   const [monto,setMonto]=useState(""); const [motivo,setMotivo]=useState("");
   const agregar=()=>{ if(!(Number(monto)>0)) return; onAddGasto(monto,motivo); setMonto(""); setMotivo(""); };
   const [movOpen,setMovOpen]=useState(false); const [mesSel,setMesSel]=useState(new Date().toISOString().slice(0,7));
@@ -808,6 +825,35 @@ function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto 
       <Stat label="Neto semana" value={money(ingresosSemana-gSum(gRango(startWeek)))} sub={`ingresos ${money(ingresosSemana)}`}/>
       <Stat label="Neto mes" value={money(ingresosMes-gSum(gRango(startMonth)))} sub={`ingresos ${money(ingresosMes)}`}/>
     </div>
+
+    <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
+      <button onClick={()=>setVehHoyOpen(v=>!v)} className="w-full flex items-center justify-between">
+        <h2 className="font-extrabold text-slate-700">Vehículos de hoy ({vehiculosHoy.length})</h2>
+        <span className="text-slate-400 text-sm">{vehHoyOpen?"▲":"▼"}</span>
+      </button>
+      {vehHoyOpen && (vehiculosHoy.length===0 ? <p className="text-sm text-slate-400 font-semibold mt-3">Ningún vehículo ha ingresado hoy.</p> :
+        <div className="mt-3 space-y-2.5 max-h-80 overflow-y-auto">
+          {vehiculosHoy.map(o=>{ const tipo=tipoOf(o.tipo); const nombres=(o.servicios||[]).map(sid=>{ const s=cfg.servicios.find(x=>x.id===sid); return s?s.nombre:sid; }).join(", ");
+            return (<div key={o.id} className="border-b border-slate-50 pb-2.5 last:border-0 last:pb-0">
+              <div className="flex items-center gap-2">
+                <span className={"p-1.5 rounded-lg shrink-0 "+tipo.tint}><Ic p={tipo.pth} size={14}/></span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-mono font-extrabold text-sm text-slate-700 truncate">{o.placa} <span className="font-sans font-semibold text-slate-400">· {o.cliente||"—"}</span></p>
+                  <p className="text-[11px] text-slate-400 font-semibold truncate">{nombres||"—"} · {o.lavador} · {o.bahia}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-extrabold text-sm text-blue-600">{money(totalOrden(o))}</p>
+                  <p className="text-[10px] text-slate-400 font-bold">{new Date(Number(o.fecha||0)).toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1.5 ml-7">
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded" style={{background:(EST[o.estado]||EST.listo).fill+"22",color:(EST[o.estado]||EST.listo).fill}}>{(ESTADOS.find(e=>e.id===o.estado)||{}).label||o.estado}</span>
+                {o.pago?.pagado ? <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-600">{o.pago.metodo}</span> : <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-600">Sin cobrar</span>}
+                {o.pago?.descuentoPct>0 && <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-600">cupón -{o.pago.descuentoPct}%</span>}
+              </div>
+            </div>); })}
+        </div>)}
+    </section>
 
     <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
       <h2 className="font-extrabold mb-3 text-slate-700">Registrar gasto</h2>
@@ -858,7 +904,7 @@ function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto 
 function Stat({label,value,big,grad,sub}){ return (<div className={"rounded-2xl p-3.5 shadow-sm "+(grad?"bg-gradient-to-br from-cyan-500 to-blue-600 text-white":"bg-white border border-blue-50")}><p className={"text-xs font-bold "+(grad?"text-cyan-50":"text-slate-400")}>{label}</p><p className={"font-extrabold "+(big?"text-2xl":"text-xl")+(grad?"":" text-slate-800")}>{value}</p>{sub&&<p className={"text-[11px] font-bold mt-0.5 "+(grad?"text-cyan-50":"text-slate-400")}>{sub}</p>}</div>); }
 
 /* ====== CLIENTES ====== */
-function Clientes({ clientes, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUpdOrder }){
+function Clientes({ clientes, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUpdOrder, onCrearLavado }){
   const [soloFrec,setSoloFrec]=useState(false);
   const conteo=(c)=>historialCliente(c,orders,cfg,totalOrden).length;
   let list=[...clientes].sort((a,b)=>conteo(b)-conteo(a));
@@ -866,15 +912,25 @@ function Clientes({ clientes, vehiculos, orders, cfg, totalOrden, onUpd, onDel, 
   if(clientes.length===0) return <Empty p={P.users} title="Sin clientes aún" msg="Se registran solos al ingresar vehículos." />;
   return (<div className="space-y-3">
     <div className="flex items-center gap-2"><button onClick={()=>setSoloFrec(false)} className={"lav-press flex-1 py-2 rounded-xl text-sm font-extrabold "+(!soloFrec?"bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow":"bg-white border border-blue-50 text-slate-500")}>Todos ({clientes.length})</button><button onClick={()=>setSoloFrec(true)} className={"lav-press flex-1 py-2 rounded-xl text-sm font-extrabold flex items-center justify-center gap-1 "+(soloFrec?"bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow":"bg-white border border-blue-50 text-slate-500")}><Ic p={P.star} size={15}/> Frecuentes</button></div>
-    {list.map(c=><ClienteCard key={c.id} c={c} vehiculos={vehiculos} orders={orders} cfg={cfg} totalOrden={totalOrden} onUpd={onUpd} onDel={onDel} onUpdOrder={onUpdOrder} />)}
+    {list.map(c=><ClienteCard key={c.id} c={c} vehiculos={vehiculos} orders={orders} cfg={cfg} totalOrden={totalOrden} onUpd={onUpd} onDel={onDel} onUpdOrder={onUpdOrder} onCrearLavado={onCrearLavado} />)}
   </div>);
 }
 
-function HistorialRow({ rec, cfg, onUpdOrder }){
-  const [open,setOpen]=useState(false); const [servSel,setServSel]=useState(rec.servicios); const [monto,setMonto]=useState(rec.monto);
-  const disponibles=cfg.servicios.filter(s=>servicioDisponiblePara(s,rec.tipo));
+function HistorialRow({ rec, cfg, onUpdOrder, autoOpen }){
+  const [open,setOpen]=useState(!!autoOpen); const [servSel,setServSel]=useState(rec.servicios); const [monto,setMonto]=useState(rec.monto);
+  const [tipoSel,setTipoSel]=useState(rec.tipo);
+  const d0=new Date(rec.fecha);
+  const [fechaSel,setFechaSel]=useState(d0.toISOString().slice(0,10));
+  const [horaSel,setHoraSel]=useState(d0.toTimeString().slice(0,5));
+  const disponibles=cfg.servicios.filter(s=>servicioDisponiblePara(s,tipoSel));
+  useEffect(()=>{ setServSel(cur=>cur.filter(sid=>disponibles.some(s=>s.id===sid))); },[tipoSel]);
   const toggle=(sid)=>setServSel(cur=>cur.includes(sid)?cur.filter(x=>x!==sid):[...cur,sid]);
-  const guardar=()=>{ const patch={servicios:servSel}; if(rec.pagado) patch.pago={...(rec.pago||{}),monto:Number(monto)||0,pagado:true}; onUpdOrder(rec.id,patch); setOpen(false); };
+  const guardar=()=>{
+    const patch={servicios:servSel, tipo:tipoSel};
+    if(fechaSel&&horaSel) patch.fecha=new Date(fechaSel+"T"+horaSel+":00").getTime();
+    if(rec.pagado) patch.pago={...(rec.pago||{}),monto:Number(monto)||0,pagado:true};
+    onUpdOrder(rec.id,patch); setOpen(false);
+  };
   return (<div className="border-b border-slate-50 pb-2 last:border-0 last:pb-0">
     <div className="flex items-center gap-2 text-sm">
       <div className="flex-1 min-w-0">
@@ -882,13 +938,23 @@ function HistorialRow({ rec, cfg, onUpdOrder }){
         <p className="text-[11px] text-slate-400 font-semibold">{new Date(rec.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit',year:'numeric'})} · {new Date(rec.fecha).toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})} · {rec.placa}{rec.pagado?" · "+rec.metodo:" · pendiente de cobro"}</p>
       </div>
       <span className="font-extrabold text-blue-600 whitespace-nowrap">{money(rec.monto)}{rec.descuentoPct>0 && <span className="block text-[10px] font-bold text-emerald-600 text-right">cupón -{rec.descuentoPct}%</span>}</span>
-      <button onClick={()=>{setOpen(v=>!v);setServSel(rec.servicios);setMonto(rec.monto);}} className="lav-press text-slate-300 hover:text-blue-500"><Ic p={P.pen} size={14}/></button>
+      <button onClick={()=>{setOpen(v=>!v);setServSel(rec.servicios);setMonto(rec.monto);setTipoSel(rec.tipo);}} className="lav-press text-slate-300 hover:text-blue-500"><Ic p={P.pen} size={14}/></button>
     </div>
     {open && (<div className="mt-2 bg-slate-50 rounded-lg p-2.5 space-y-2 lav-pop">
-      <p className="text-[11px] font-bold text-slate-400">Tipo(s) de lavado</p>
+      <p className="text-[11px] font-bold text-slate-400">Tipo de vehículo</p>
+      <div className="flex flex-wrap gap-1.5">
+        {TIPOS.map(t=>{ const on=tipoSel===t.id;
+          return (<button key={t.id} onClick={()=>setTipoSel(t.id)} className={"lav-press flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border-2 "+(on?"border-blue-500 bg-blue-50 text-blue-700":"border-slate-200 text-slate-400")}><Ic p={t.pth} size={12}/>{t.label}</button>); })}
+      </div>
+      <p className="text-[11px] font-bold text-slate-400 mt-1">Tipo(s) de lavado</p>
       <div className="flex flex-wrap gap-1.5">
         {disponibles.map(s=>{ const on=servSel.includes(s.id);
           return (<button key={s.id} onClick={()=>toggle(s.id)} className={"lav-press px-2 py-1 rounded-lg text-[11px] font-bold border-2 "+(on?"border-blue-500 bg-blue-50 text-blue-700":"border-slate-200 text-slate-400")}>{s.nombre}</button>); })}
+        {disponibles.length===0 && <p className="text-[11px] text-slate-400 font-semibold">Sin servicios configurados para este tipo.</p>}
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-1">
+        <label className="block"><span className="text-[11px] font-bold text-slate-400">Fecha</span><input type="date" value={fechaSel} onChange={e=>setFechaSel(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold outline-none focus:border-blue-500"/></label>
+        <label className="block"><span className="text-[11px] font-bold text-slate-400">Hora</span><input type="time" value={horaSel} onChange={e=>setHoraSel(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold outline-none focus:border-blue-500"/></label>
       </div>
       {rec.pagado && (<label className="block"><span className="text-[11px] font-bold text-slate-400">Monto cobrado $</span><input type="number" value={monto} onChange={e=>setMonto(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-center outline-none focus:border-blue-500"/></label>)}
       <div className="flex gap-2">
@@ -899,8 +965,8 @@ function HistorialRow({ rec, cfg, onUpdOrder }){
   </div>);
 }
 
-function ClienteCard({ c, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUpdOrder }){
-  const [edit,setEdit]=useState(false); const [del,setDel]=useState(false); const [histOpen,setHistOpen]=useState(false);
+function ClienteCard({ c, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUpdOrder, onCrearLavado }){
+  const [edit,setEdit]=useState(false); const [del,setDel]=useState(false); const [histOpen,setHistOpen]=useState(false); const [autoAbrir,setAutoAbrir]=useState(null);
   const [f,setF]=useState({nombre:c.nombre||"", whatsapp:c.whatsapp||"", visitas:c.visitas||0});
   const misVeh=vehiculos.filter(v=>v.clienteId===c.id);
   const hist=historialCliente(c,orders,cfg,totalOrden);
@@ -932,12 +998,16 @@ function ClienteCard({ c, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUp
     </button>
     {histOpen && (<div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
       {hist.length===0 ? <p className="text-xs text-slate-400 font-semibold">Sin lavados registrados aún.</p> :
-        hist.map(rec=><HistorialRow key={rec.id} rec={rec} cfg={cfg} onUpdOrder={onUpdOrder}/>)}
+        hist.map(rec=><HistorialRow key={rec.id} rec={rec} cfg={cfg} onUpdOrder={onUpdOrder} autoOpen={rec.id===autoAbrir}/>)}
     </div>)}
-    {(c.visitas||0)!==visitasReales && (<div className="mt-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl p-2.5 flex items-center gap-2">
-      <Ic p={P.alert} size={14} className="text-amber-500 shrink-0"/>
-      <p className="flex-1 text-[11px] font-bold text-amber-700">Visitas registradas: {c.visitas||0} · Lavados reales: {visitasReales}</p>
-      <button onClick={()=>onUpd(c.id,{visitas:visitasReales})} className="lav-press bg-amber-500 text-white text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg whitespace-nowrap">Corregir</button>
+    {(c.visitas||0)!==visitasReales && (<div className="mt-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl p-2.5">
+      <div className="flex items-center gap-2"><Ic p={P.alert} size={14} className="text-amber-500 shrink-0"/>
+        <p className="flex-1 text-[11px] font-bold text-amber-700">Visitas registradas: {c.visitas||0} · Lavados reales: {visitasReales}</p>
+      </div>
+      <div className="flex gap-1.5 mt-2">
+        {(c.visitas||0)>visitasReales && <button onClick={()=>{ const id=onCrearLavado(c); setAutoAbrir(id); setHistOpen(true); }} className="lav-press flex-1 bg-amber-500 text-white text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg whitespace-nowrap">+ Agregar lavado faltante</button>}
+        <button onClick={()=>onUpd(c.id,{visitas:visitasReales})} className="lav-press flex-1 bg-white border-2 border-amber-300 text-amber-600 text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg whitespace-nowrap">Corregir a {visitasReales}</button>
+      </div>
     </div>)}
     <div className="grid grid-cols-3 gap-1.5 mt-3">
       <a href={wa} target="_blank" rel="noreferrer" className="lav-press bg-emerald-50 text-emerald-600 border-2 border-emerald-100 text-xs font-extrabold py-2 rounded-xl flex items-center justify-center gap-1"><Ic p={P.msg} size={14}/> Promo</a>
