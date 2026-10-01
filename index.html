@@ -703,7 +703,15 @@ function Card({ o, total, cfg, role, onUpd, onDel }){
       {o.productos?.length>0&&(<div className="flex flex-wrap gap-1 mt-2">{o.productos.map((it,i)=>(<span key={i} className="bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg px-2 py-0.5 text-[11px] font-bold flex items-center gap-1"><Ic p={P.box} size={10}/>{it.nombre} x{it.cantidad}</span>))}</div>)}
       {payOpen&&(<div className="lav-pop mt-2.5 bg-slate-50 border-2 border-slate-100 rounded-xl p-2.5">
         <label className="flex items-center gap-2 mb-2 cursor-pointer"><input type="checkbox" checked={aplicarDesc} onChange={e=>setAplicarDesc(e.target.checked)} className="w-4 h-4"/><span className="text-xs font-bold text-slate-600">Aplicar descuento tarjeta</span><input type="number" value={descPctLocal} onChange={e=>setDescPctLocal(Number(e.target.value)||0)} className="w-14 rounded-lg border-2 border-slate-200 px-1.5 py-1 text-xs font-bold text-center outline-none focus:border-blue-500"/><span className="text-xs font-bold text-slate-400">%</span></label>
-        <p className="text-xs font-bold text-slate-500 mb-2 text-center">Cobrar {money(totalConDesc)} con:{aplicarDesc&&descPct>0&&<span className="block text-[11px] text-emerald-600 font-bold">({money(total)} − {descPct}% descuento)</span>}</p>
+        {aplicarDesc&&descPct>0 ? (
+          <div className="text-center mb-2">
+            <p className="text-xs font-bold text-slate-400 line-through">{money(total)}</p>
+            <p className="text-xs font-bold text-emerald-600">-{descPct}% · ahorras {money(total-totalConDesc)}</p>
+            <p className="text-base font-extrabold text-blue-600">Cobrar {money(totalConDesc)}</p>
+          </div>
+        ) : (
+          <p className="text-xs font-bold text-slate-500 mb-2 text-center">Cobrar {money(totalConDesc)} con:</p>
+        )}
         <div className="grid grid-cols-2 gap-1.5">{METODOS.map(m=>(<button key={m} onClick={()=>cobrar(m)} className="lav-press bg-white border-2 border-slate-200 hover:border-blue-400 rounded-lg py-2 text-xs font-extrabold text-slate-600">{m}</button>))}</div>
         <button onClick={()=>{setPayOpen(false);setAplicarDesc(false);}} className="w-full text-xs font-bold text-slate-400 mt-2">Cancelar</button>
       </div>)}
