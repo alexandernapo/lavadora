@@ -16,6 +16,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
 body{font-family:'Nunito',system-ui,sans-serif;margin:0;}
@@ -205,19 +206,24 @@ function csv(rows){ if(!rows||!rows.length) return ""; const cols=Object.keys(ro
 function descargar(nombre,contenido,tipo){ const blob=new Blob([contenido],{type:tipo}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function bancoTexto(b){ if(!b||!b.numero) return ""; return `Banco ${b.banco||""} · ${b.tipo||"Cuenta"} ${b.numero} · ${b.titular||""}${b.cedula?" · CI/RUC "+b.cedula:""}`; }
 function redUrl(tipo,val){ if(!val) return "#"; const v=String(val).trim(); if(/^https?:\/\//i.test(v)) return v; const h=v.replace(/^@/,""); if(tipo==="instagram") return "https://instagram.com/"+h; if(tipo==="facebook") return "https://facebook.com/"+h; if(tipo==="tiktok") return "https://tiktok.com/@"+h; return v; }
-function lealtadCliente(c, orders, servicios){
-  const cnt={}; const wc=waNumber(c.whatsapp);
-  (orders||[]).forEach(o=>{
-    const done=(o.pago&&o.pago.pagado)||o.estado==="entregado"; if(!done) return;
-    const match=(wc && waNumber(o.whatsapp)===wc) || (c.nombre && (o.cliente||"").trim().toLowerCase()===c.nombre.trim().toLowerCase());
-    if(!match) return;
-    (o.servicios||[]).forEach(sid=>{ cnt[sid]=(cnt[sid]||0)+1; });
-  });
+function lealtadDesdeHistorial(hist,servicios){
+  const cnt={};
+  (hist||[]).forEach(rec=>{ (rec.servicios||[]).forEach(sid=>{ cnt[sid]=(cnt[sid]||0)+1; }); });
   const porTipo=Object.keys(cnt).map(sid=>{ const s=(servicios||[]).find(x=>x.id===sid); const count=cnt[sid];
     return { id:sid, nombre:(s&&s.nombre)||sid, count, sellos:count%META_LEALTAD, gratis: count>0 && count%META_LEALTAD===0 }; }).sort((a,b)=>b.count-a.count);
-  const total=Object.values(cnt).reduce((a,n)=>a+n,0);
   const gratis=porTipo.filter(t=>t.gratis).map(t=>t.nombre);
-  return { porTipo, total, gratis };
+  return { porTipo, gratis };
+}
+function historialCliente(c, orders, cfg, totalOrden){
+  const wc=waNumber(c.whatsapp);
+  const lista=(orders||[]).filter(o=>{
+    const done=(o.pago&&o.pago.pagado)||o.estado==="entregado"; if(!done) return false;
+    return (wc && waNumber(o.whatsapp)===wc) || (c.nombre && (o.cliente||"").trim().toLowerCase()===c.nombre.trim().toLowerCase());
+  }).map(o=>{
+    const nombres=(o.servicios||[]).map(sid=>{ const s=(cfg.servicios||[]).find(x=>x.id===sid); return s?s.nombre:sid; });
+    return { id:o.id, fecha:Number(o.fecha||0), placa:o.placa, tipo:o.tipo, servicios:(o.servicios||[]), nombres, monto:totalOrden(o), pagado:!!(o.pago&&o.pago.pagado), metodo:o.pago?o.pago.metodo:"", descuentoPct:(o.pago&&o.pago.descuentoPct)||0, pago:o.pago };
+  }).sort((a,b)=>b.fecha-a.fecha);
+  return lista;
 }
 
 /* ====== APP ====== */
@@ -385,7 +391,7 @@ function App({demoRole}={}){
         {T==="recepcion" && <Recepcion cfg={cfg} clientes={clientes} vehiculos={vehiculos} tipoMult={tipoMult} onAdd={ingresar} />}
         {T==="tablero" && <Tablero orders={orders} totalOrden={totalOrden} cfg={cfg} role={role} onUpd={updOrder} onDel={delOrder} />}
         {T==="caja" && <Caja orders={orders} totalOrden={totalOrden} cfg={cfg} gastos={gastos} ventas={ventas} onAddGasto={addGasto} onDelGasto={delGasto} />}
-        {T==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} orders={orders} cfg={cfg} onUpd={updCliente} onDel={delCliente} />}
+        {T==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} orders={orders} cfg={cfg} totalOrden={totalOrden} onUpd={updCliente} onDel={delCliente} onUpdOrder={updOrder} />}
         {T==="tienda" && <Tienda productos={productos} orders={orders} ventas={ventas} onAdd={addProducto} onUpd={updProducto} onDel={delProducto} onMove={moveProducto} onVenderDirecta={venderProducto} onAgregarAVehiculo={agregarProductoAOrden} />}
         {T==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} clientes={clientes} vehiculos={vehiculos} orders={orders} totalOrden={totalOrden} onReset={resetDatos} />}
       </main>
@@ -568,7 +574,9 @@ function Card({ o, total, cfg, role, onUpd, onDel }){
   const soloProceso = role==="empleado";
   const seq=etapasDeOrden(o,cfg.servicios); const idx=Math.max(0,seq.indexOf(o.estado)); const tipo=tipoOf(o.tipo); const st=EST[o.estado]||EST.listo;
   const etLabel=(ESTADOS.find(e=>e.id===o.estado)||{}).label||o.estado;
-  const [payOpen,setPayOpen]=useState(false); const [delOpen,setDelOpen]=useState(false); const [copiado,setCopiado]=useState(false);
+  const [payOpen,setPayOpen]=useState(false); const [delOpen,setDelOpen]=useState(false); const [copiado,setCopiado]=useState(false); const [aplicarDesc,setAplicarDesc]=useState(false);
+  const descPct=Number((cfg.licencia&&cfg.licencia.descuentoPct)||0);
+  const totalConDesc=(aplicarDesc&&descPct>0)?Math.round(total*(1-descPct/100)*100)/100:total;
   const move=(d)=>{ const n=seq[idx+d]; if(n)onUpd(o.id,{estado:n}); };
   const seg=window.location.origin+window.location.pathname+"?seguir="+o.id;
   const bt=bancoTexto(cfg.licencia&&cfg.licencia.banco);
@@ -577,7 +585,7 @@ function Card({ o, total, cfg, role, onUpd, onDel }){
   const waMsg=encodeURIComponent((o.estado==="listo"||o.estado==="entregado")?listoMsg:procesoMsg);
   const waHref=`https://wa.me/${waNumber(o.whatsapp)}?text=${waMsg}`;
   const copiar=()=>{ try{ navigator.clipboard.writeText(seg); }catch(e){} setCopiado(true); setTimeout(()=>setCopiado(false),1500); };
-  const cobrar=(m)=>{ onUpd(o.id,{pago:{metodo:m,monto:total,pagado:true}}); setPayOpen(false); };
+  const cobrar=(m)=>{ onUpd(o.id,{pago:{metodo:m,monto:totalConDesc,pagado:true,descuentoPct:(aplicarDesc?descPct:0)}}); setPayOpen(false); setAplicarDesc(false); };
   return (
     <div className="bg-white rounded-xl border border-slate-100 p-3 shadow-sm relative">
       <div className="flex items-start gap-2.5"><span className={"p-2.5 rounded-xl "+tipo.tint}><Ic p={tipo.pth} size={20}/></span>
@@ -601,15 +609,73 @@ function Card({ o, total, cfg, role, onUpd, onDel }){
         <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.user} size={11}/>{o.lavador}</span>
         <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg">{money(total)}</span>
         {o.pago?.pagado&&<span className="bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.ok} size={11}/>{o.pago.metodo}</span>}
+        {o.pago?.pagado&&o.pago?.descuentoPct>0&&<span className="bg-amber-100 text-amber-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.gift} size={11}/>cupón -{o.pago.descuentoPct}%</span>}
         <a href={waHref} target="_blank" rel="noreferrer" className="lav-press bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.msg} size={11}/> Enviar link</a>
       </div>
       {o.danos?.length>0&&<p className="text-xs text-amber-500 mt-2 flex items-start gap-1 font-bold"><Ic p={P.alert} size={12} className="mt-0.5 shrink-0"/> {o.danos.join(", ")}</p>}
       {o.productos?.length>0&&(<div className="flex flex-wrap gap-1 mt-2">{o.productos.map((it,i)=>(<span key={i} className="bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg px-2 py-0.5 text-[11px] font-bold flex items-center gap-1"><Ic p={P.box} size={10}/>{it.nombre} x{it.cantidad}</span>))}</div>)}
-      {payOpen&&(<div className="lav-pop mt-2.5 bg-slate-50 border-2 border-slate-100 rounded-xl p-2.5"><p className="text-xs font-bold text-slate-500 mb-2 text-center">Cobrar {money(total)} con:</p><div className="grid grid-cols-2 gap-1.5">{METODOS.map(m=>(<button key={m} onClick={()=>cobrar(m)} className="lav-press bg-white border-2 border-slate-200 hover:border-blue-400 rounded-lg py-2 text-xs font-extrabold text-slate-600">{m}</button>))}</div><button onClick={()=>setPayOpen(false)} className="w-full text-xs font-bold text-slate-400 mt-2">Cancelar</button></div>)}
+      {payOpen&&(<div className="lav-pop mt-2.5 bg-slate-50 border-2 border-slate-100 rounded-xl p-2.5">
+        {descPct>0 && (<label className="flex items-center gap-2 mb-2 cursor-pointer"><input type="checkbox" checked={aplicarDesc} onChange={e=>setAplicarDesc(e.target.checked)} className="w-4 h-4"/><span className="text-xs font-bold text-slate-600">Aplicar descuento tarjeta (-{descPct}%)</span></label>)}
+        <p className="text-xs font-bold text-slate-500 mb-2 text-center">Cobrar {money(totalConDesc)} con:{aplicarDesc&&descPct>0&&<span className="block text-[11px] text-emerald-600 font-bold">({money(total)} − {descPct}% descuento)</span>}</p>
+        <div className="grid grid-cols-2 gap-1.5">{METODOS.map(m=>(<button key={m} onClick={()=>cobrar(m)} className="lav-press bg-white border-2 border-slate-200 hover:border-blue-400 rounded-lg py-2 text-xs font-extrabold text-slate-600">{m}</button>))}</div>
+        <button onClick={()=>{setPayOpen(false);setAplicarDesc(false);}} className="w-full text-xs font-bold text-slate-400 mt-2">Cancelar</button>
+      </div>)}
       {!payOpen&&(<div className="flex gap-1.5 mt-2.5"><button onClick={()=>move(-1)} disabled={idx===0} className="lav-press flex items-center justify-center px-3 py-2 rounded-xl border-2 border-slate-100 text-slate-400 disabled:opacity-30"><Ic p={P.left} size={16}/></button>{!soloProceso && !o.pago?.pagado && <button onClick={()=>setPayOpen(true)} className="lav-press flex-1 flex items-center justify-center py-2 rounded-xl bg-slate-800 text-white text-xs font-extrabold gap-1"><Ic p={P.dollar} size={14}/> Cobrar</button>}{o.estado!=="listo"?<button onClick={()=>move(1)} className="lav-press flex-1 flex items-center justify-center py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold gap-1">Avanzar <Ic p={P.right} size={16}/></button>:<button onClick={()=>onUpd(o.id,{estado:"entregado"})} className="lav-press flex-1 flex items-center justify-center py-2 rounded-xl bg-emerald-600 text-white font-extrabold gap-1"><Ic p={P.check} size={16}/> Entregar</button>}</div>)}
       {delOpen&&(<div className="absolute inset-0 bg-white/95 rounded-xl flex flex-col items-center justify-center gap-2 p-3 lav-pop"><p className="text-sm font-extrabold text-slate-700 text-center">¿Eliminar {o.placa}?</p><div className="flex gap-2 w-full"><button onClick={()=>setDelOpen(false)} className="lav-press flex-1 py-2 rounded-lg border-2 border-slate-200 font-bold text-slate-500 text-sm">No</button><button onClick={()=>onDel(o.id)} className="lav-press flex-1 py-2 rounded-lg bg-rose-500 text-white font-bold text-sm">Sí, eliminar</button></div></div>)}
     </div>
   );
+}
+
+function totalesDesdeMovs(movsPeriodo){
+  const ingresos=movsPeriodo.filter(m=>m.tipo==="ingreso"); const salidas=movsPeriodo.filter(m=>m.tipo==="salida");
+  const porMetodo={}; ingresos.forEach(m=>{ const k=m.metodo||"Otro"; porMetodo[k]=(porMetodo[k]||0)+(Number(m.monto)||0); });
+  const totalIngresos=ingresos.reduce((a,m)=>a+(Number(m.monto)||0),0);
+  const totalGastos=salidas.reduce((a,m)=>a+(Number(m.monto)||0),0);
+  const conCupon=ingresos.filter(m=>m.observacion&&m.observacion.indexOf("Cupón")===0).length;
+  const rows=[{label:"Cantidad de servicios/ventas cobrados",value:String(ingresos.length)}];
+  Object.entries(porMetodo).forEach(([k,v])=>rows.push({label:"Total en "+k,value:money(v)}));
+  if(conCupon>0) rows.push({label:"Cobros con cupón de descuento",value:String(conCupon)});
+  rows.push({label:"TOTAL DE INGRESOS",value:money(totalIngresos)});
+  rows.push({label:"Total de gastos",value:money(totalGastos)});
+  rows.push({label:"TOTAL NETO DEL PERIODO",value:money(totalIngresos-totalGastos)});
+  return rows;
+}
+function generarPDFResumen({ cfg, periodoLabel, movs }){
+  if(!window.jspdf){ alert("No se pudo cargar el generador de PDF. Verifica tu conexión e intenta de nuevo."); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:"pt", format:"a4" });
+  const margin=40; const pageW=555; let y=margin;
+  doc.setFontSize(16); doc.setFont(undefined,"bold"); doc.text(cfg.negocio||"Lavadora", margin, y); y+=20;
+  doc.setFontSize(11); doc.setFont(undefined,"normal"); doc.text("Resumen de caja · "+periodoLabel, margin, y); y+=14;
+  doc.setFontSize(9); doc.setTextColor(120); doc.text("Generado: "+new Date().toLocaleString('es-EC'), margin, y); doc.setTextColor(0); y+=20;
+
+  const ordenados=[...movs].sort((a,b)=>a.fecha-b.fecha);
+  doc.setFontSize(9); doc.setFont(undefined,"bold");
+  doc.text("Fecha",margin,y); doc.text("Tipo de servicio",margin+65,y); doc.text("Placa",margin+230,y); doc.text("Operario",margin+280,y); doc.text("Forma pago",margin+350,y); doc.text("Obs.",margin+420,y); doc.text("Monto",pageW,y,{align:"right"});
+  y+=4; doc.setLineWidth(0.5); doc.line(margin,y,pageW,y); y+=12;
+  doc.setFont(undefined,"normal");
+  ordenados.forEach(m=>{
+    if(y>760){ doc.addPage(); y=margin; }
+    const fechaTxt=new Date(m.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit'})+" "+new Date(m.fecha).toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'});
+    doc.text(fechaTxt,margin,y);
+    doc.text(String(m.tiposServicio||m.concepto||"").slice(0,32),margin+65,y);
+    doc.text(String(m.placa||"-"),margin+230,y);
+    doc.text(String(m.operario||"-").slice(0,14),margin+280,y);
+    doc.text(String(m.metodo||"-"),margin+350,y);
+    doc.text(String(m.observacion||"-").slice(0,14),margin+420,y);
+    doc.setTextColor(m.tipo==="ingreso"?16:200, m.tipo==="ingreso"?150:38, m.tipo==="ingreso"?80:38);
+    doc.text((m.tipo==="ingreso"?"+":"-")+money(m.monto),pageW,y,{align:"right"});
+    doc.setTextColor(0);
+    y+=14;
+  });
+  if(ordenados.length===0){ doc.setFont(undefined,"italic"); doc.text("Sin movimientos en este período.",margin,y); y+=16; doc.setFont(undefined,"normal"); }
+  y+=8; doc.line(margin,y,pageW,y); y+=20;
+
+  doc.setFont(undefined,"bold"); doc.setFontSize(12); doc.text("Resumen del período",margin,y); y+=18;
+  doc.setFontSize(10); doc.setFont(undefined,"normal");
+  totalesDesdeMovs(movs).forEach(t=>{ if(y>770){ doc.addPage(); y=margin; } doc.text(t.label,margin,y); doc.text(t.value,pageW,y,{align:"right"}); y+=16; });
+
+  doc.save("resumen-"+periodoLabel.replace(/\s+/g,"-").toLowerCase().replace(/[^a-z0-9\-]/g,"")+".pdf");
 }
 
 /* ====== CAJA ====== */
@@ -635,10 +701,25 @@ function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto 
   const [monto,setMonto]=useState(""); const [motivo,setMotivo]=useState("");
   const agregar=()=>{ if(!(Number(monto)>0)) return; onAddGasto(monto,motivo); setMonto(""); setMotivo(""); };
   const [movOpen,setMovOpen]=useState(false); const [mesSel,setMesSel]=useState(new Date().toISOString().slice(0,7));
-  const movs=[]; pagados.forEach(o=>movs.push({fecha:Number(o.fecha||0),tipo:"ingreso",concepto:(o.placa+" · "+(o.cliente||"")),monto:totalOrden(o),metodo:o.pago.metodo})); (gastos||[]).forEach(g=>movs.push({fecha:Number(g.fecha||0),tipo:"salida",concepto:(g.motivo||"Gasto"),monto:Number(g.monto)||0,metodo:""})); (ventas||[]).forEach(v=>movs.push({fecha:Number(v.fecha||0),tipo:"ingreso",concepto:("Venta: "+v.nombre+" x"+v.cantidad),monto:Number(v.total)||0,metodo:"Tienda"})); movs.sort((a,b)=>b.fecha-a.fecha);
+  const movs=[];
+  pagados.forEach(o=>movs.push({ fecha:Number(o.fecha||0), tipo:"ingreso",
+    concepto:(o.placa+" · "+(o.cliente||"")), monto:totalOrden(o), metodo:o.pago.metodo,
+    placa:o.placa, operario:o.lavador||"", tiposServicio:(o.servicios||[]).map(sid=>{ const s=cfg.servicios.find(x=>x.id===sid); return s?s.nombre:sid; }).join(", "),
+    observacion:(o.pago&&o.pago.descuentoPct>0)?("Cupón -"+o.pago.descuentoPct+"%"):"" }));
+  (gastos||[]).forEach(g=>movs.push({ fecha:Number(g.fecha||0), tipo:"salida", concepto:(g.motivo||"Gasto"), monto:Number(g.monto)||0, metodo:"", placa:"", operario:"", tiposServicio:(g.motivo||"Gasto"), observacion:"" }));
+  (ventas||[]).forEach(v=>movs.push({ fecha:Number(v.fecha||0), tipo:"ingreso", concepto:("Venta: "+v.nombre+" x"+v.cantidad), monto:Number(v.total)||0, metodo:"Tienda", placa:"", operario:"", tiposServicio:("Venta: "+v.nombre+" x"+v.cantidad), observacion:(v.cliente||"") }));
+  movs.sort((a,b)=>b.fecha-a.fecha);
   const fmtMov=(ms)=>new Date(ms).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit'})+" "+new Date(ms).toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'});
   const movMes=movs.filter(m=>m.fecha>=startMonth).map(m=>({...m,fechaTxt:fmtMov(m.fecha)}));
   const descargarMes=()=>{ if(!mesSel) return; const p=mesSel.split("-"); const y=Number(p[0]),mo=Number(p[1]); const from=new Date(y,mo-1,1).getTime(),to=new Date(y,mo,1).getTime(); const rows=movs.filter(m=>m.fecha>=from&&m.fecha<to).sort((a,b)=>a.fecha-b.fecha).map(m=>({fecha:new Date(m.fecha).toLocaleString('es-EC'),tipo:m.tipo==="ingreso"?"Ingreso":"Salida",concepto:m.concepto,monto:(m.tipo==="ingreso"?"+":"-")+(Number(m.monto)||0).toFixed(2),metodo:m.metodo})); descargar("movimientos-"+mesSel+".csv", csv(rows), "text/csv;charset=utf-8"); };
+  const descargarResumenPDF=(periodo)=>{
+    let desde,label;
+    if(periodo==="hoy"){ desde=startToday; label="Resumen diario "+new Date().toLocaleDateString('es-EC'); }
+    else if(periodo==="semana"){ desde=startWeek; label="Resumen semanal desde "+new Date(startWeek).toLocaleDateString('es-EC'); }
+    else { desde=startMonth; label="Resumen mensual "+new Date().toLocaleDateString('es-EC',{month:'long',year:'numeric'}); }
+    const movsPeriodo=movs.filter(m=>m.fecha>=desde);
+    generarPDFResumen({ cfg, periodoLabel:label, movs:movsPeriodo });
+  };
 
   return (<div className="space-y-4">
     <div className="rounded-2xl p-5 shadow-sm bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
@@ -663,6 +744,16 @@ function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto 
         <button onClick={agregar} className="lav-press bg-gradient-to-br from-cyan-500 to-blue-600 text-white px-4 rounded-xl font-extrabold"><Ic p={P.plus} size={18}/></button>
       </div>
       {gHoy.length>0 && (<div className="mt-3 space-y-2">{gHoy.map(g=>(<div key={g.id} className="flex items-center gap-2 text-sm"><span className="flex-1 text-slate-600 font-semibold truncate">{g.motivo||"Gasto"}</span><span className="font-extrabold text-rose-500">-{money(g.monto)}</span><button onClick={()=>onDelGasto(g.id)} className="lav-press text-slate-300 hover:text-rose-500"><Ic p={P.trash} size={15}/></button></div>))}</div>)}
+    </section>
+
+    <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
+      <h2 className="font-extrabold mb-1 text-slate-700">Descargar resumen (hoja)</h2>
+      <p className="text-xs text-slate-400 mb-3 font-semibold">Igual que la hoja de control física: servicios, forma de pago y totales del período.</p>
+      <div className="grid grid-cols-3 gap-2">
+        <button onClick={()=>descargarResumenPDF("hoy")} className="lav-press bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-extrabold py-2.5 rounded-xl text-xs">Hoy</button>
+        <button onClick={()=>descargarResumenPDF("semana")} className="lav-press bg-blue-50 border-2 border-blue-100 text-blue-700 font-extrabold py-2.5 rounded-xl text-xs">Semana</button>
+        <button onClick={()=>descargarResumenPDF("mes")} className="lav-press bg-blue-50 border-2 border-blue-100 text-blue-700 font-extrabold py-2.5 rounded-xl text-xs">Mes</button>
+      </div>
     </section>
 
     <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
@@ -694,29 +785,61 @@ function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto 
 function Stat({label,value,big,grad,sub}){ return (<div className={"rounded-2xl p-3.5 shadow-sm "+(grad?"bg-gradient-to-br from-cyan-500 to-blue-600 text-white":"bg-white border border-blue-50")}><p className={"text-xs font-bold "+(grad?"text-cyan-50":"text-slate-400")}>{label}</p><p className={"font-extrabold "+(big?"text-2xl":"text-xl")+(grad?"":" text-slate-800")}>{value}</p>{sub&&<p className={"text-[11px] font-bold mt-0.5 "+(grad?"text-cyan-50":"text-slate-400")}>{sub}</p>}</div>); }
 
 /* ====== CLIENTES ====== */
-function Clientes({ clientes, vehiculos, orders, cfg, onUpd, onDel }){
+function Clientes({ clientes, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUpdOrder }){
   const [soloFrec,setSoloFrec]=useState(false);
-  let list=[...clientes].sort((a,b)=>(b.visitas||0)-(a.visitas||0));
-  if(soloFrec) list=list.filter(c=>(c.visitas||0)>=META_LEALTAD);
+  const conteo=(c)=>historialCliente(c,orders,cfg,totalOrden).length;
+  let list=[...clientes].sort((a,b)=>conteo(b)-conteo(a));
+  if(soloFrec) list=list.filter(c=>conteo(c)>=META_LEALTAD);
   if(clientes.length===0) return <Empty p={P.users} title="Sin clientes aún" msg="Se registran solos al ingresar vehículos." />;
   return (<div className="space-y-3">
     <div className="flex items-center gap-2"><button onClick={()=>setSoloFrec(false)} className={"lav-press flex-1 py-2 rounded-xl text-sm font-extrabold "+(!soloFrec?"bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow":"bg-white border border-blue-50 text-slate-500")}>Todos ({clientes.length})</button><button onClick={()=>setSoloFrec(true)} className={"lav-press flex-1 py-2 rounded-xl text-sm font-extrabold flex items-center justify-center gap-1 "+(soloFrec?"bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow":"bg-white border border-blue-50 text-slate-500")}><Ic p={P.star} size={15}/> Frecuentes</button></div>
-    {list.map(c=><ClienteCard key={c.id} c={c} vehiculos={vehiculos} orders={orders} cfg={cfg} onUpd={onUpd} onDel={onDel} />)}
+    {list.map(c=><ClienteCard key={c.id} c={c} vehiculos={vehiculos} orders={orders} cfg={cfg} totalOrden={totalOrden} onUpd={onUpd} onDel={onDel} onUpdOrder={onUpdOrder} />)}
   </div>);
 }
 
-function ClienteCard({ c, vehiculos, orders, cfg, onUpd, onDel }){
-  const [edit,setEdit]=useState(false); const [del,setDel]=useState(false);
+function HistorialRow({ rec, cfg, onUpdOrder }){
+  const [open,setOpen]=useState(false); const [servSel,setServSel]=useState(rec.servicios); const [monto,setMonto]=useState(rec.monto);
+  const disponibles=cfg.servicios.filter(s=>servicioDisponiblePara(s,rec.tipo));
+  const toggle=(sid)=>setServSel(cur=>cur.includes(sid)?cur.filter(x=>x!==sid):[...cur,sid]);
+  const guardar=()=>{ const patch={servicios:servSel}; if(rec.pagado) patch.pago={...(rec.pago||{}),monto:Number(monto)||0,pagado:true}; onUpdOrder(rec.id,patch); setOpen(false); };
+  return (<div className="border-b border-slate-50 pb-2 last:border-0 last:pb-0">
+    <div className="flex items-center gap-2 text-sm">
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-slate-600 truncate">{rec.nombres.join(", ")||"—"}</p>
+        <p className="text-[11px] text-slate-400 font-semibold">{new Date(rec.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit',year:'numeric'})} · {rec.placa}{rec.pagado?" · "+rec.metodo:" · pendiente de cobro"}</p>
+      </div>
+      <span className="font-extrabold text-blue-600 whitespace-nowrap">{money(rec.monto)}{rec.descuentoPct>0 && <span className="block text-[10px] font-bold text-emerald-600 text-right">cupón -{rec.descuentoPct}%</span>}</span>
+      <button onClick={()=>{setOpen(v=>!v);setServSel(rec.servicios);setMonto(rec.monto);}} className="lav-press text-slate-300 hover:text-blue-500"><Ic p={P.pen} size={14}/></button>
+    </div>
+    {open && (<div className="mt-2 bg-slate-50 rounded-lg p-2.5 space-y-2 lav-pop">
+      <p className="text-[11px] font-bold text-slate-400">Tipo(s) de lavado</p>
+      <div className="flex flex-wrap gap-1.5">
+        {disponibles.map(s=>{ const on=servSel.includes(s.id);
+          return (<button key={s.id} onClick={()=>toggle(s.id)} className={"lav-press px-2 py-1 rounded-lg text-[11px] font-bold border-2 "+(on?"border-blue-500 bg-blue-50 text-blue-700":"border-slate-200 text-slate-400")}>{s.nombre}</button>); })}
+      </div>
+      {rec.pagado && (<label className="block"><span className="text-[11px] font-bold text-slate-400">Monto cobrado $</span><input type="number" value={monto} onChange={e=>setMonto(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-center outline-none focus:border-blue-500"/></label>)}
+      <div className="flex gap-2">
+        <button onClick={()=>setOpen(false)} className="lav-press flex-1 py-1.5 rounded-lg border-2 border-slate-200 font-bold text-slate-500 text-xs">Cancelar</button>
+        <button onClick={guardar} className="lav-press flex-1 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs">Guardar</button>
+      </div>
+    </div>)}
+  </div>);
+}
+
+function ClienteCard({ c, vehiculos, orders, cfg, totalOrden, onUpd, onDel, onUpdOrder }){
+  const [edit,setEdit]=useState(false); const [del,setDel]=useState(false); const [histOpen,setHistOpen]=useState(false);
   const [f,setF]=useState({nombre:c.nombre||"", whatsapp:c.whatsapp||"", visitas:c.visitas||0});
   const misVeh=vehiculos.filter(v=>v.clienteId===c.id);
-  const L=lealtadCliente(c,orders,cfg.servicios);
+  const hist=historialCliente(c,orders,cfg,totalOrden);
+  const visitasReales=hist.length;
+  const L=lealtadDesdeHistorial(hist,cfg.servicios);
   const gratisTxt=L.gratis.length?`¡Tienes lavado GRATIS disponible en: ${L.gratis.join(", ")}! 🎁`:"Junta 5 del mismo tipo y el siguiente es gratis.";
-  const promo=encodeURIComponent(`Hola ${c.nombre||""}! 🚗💦 En ${cfg.negocio} valoramos tu preferencia (${L.total} lavados). ${gratisTxt} ¡Te esperamos!`);
+  const promo=encodeURIComponent(`Hola ${c.nombre||""}! 🚗💦 En ${cfg.negocio} valoramos tu preferencia (${visitasReales} lavados). ${gratisTxt} ¡Te esperamos!`);
   const wa=`https://wa.me/${waNumber(c.whatsapp)}?text=${promo}`;
   const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500";
   const guardar=()=>{ onUpd(c.id,{nombre:f.nombre.trim(), whatsapp:f.whatsapp.trim(), visitas:Number(f.visitas)||0}); setEdit(false); };
   return (<div className="bg-white rounded-2xl border border-blue-50 shadow-sm p-3.5 relative">
-    <div className="flex items-center gap-3"><span className="bg-gradient-to-br from-cyan-400 to-blue-500 text-white p-2.5 rounded-xl"><Ic p={P.user} size={20}/></span><div className="flex-1 min-w-0"><p className="font-extrabold text-slate-700 truncate flex items-center gap-1.5">{c.nombre||"—"}{L.total>=META_LEALTAD&&<Ic p={P.star} size={14} fill="#fbbf24" className="text-amber-400"/>}</p><p className="text-xs text-slate-400 font-bold">{c.whatsapp||"sin WhatsApp"}</p></div><div className="text-right"><p className="text-2xl font-extrabold text-blue-600 leading-none">{L.total}</p><p className="text-[10px] font-bold text-slate-400">lavados</p></div></div>
+    <div className="flex items-center gap-3"><span className="bg-gradient-to-br from-cyan-400 to-blue-500 text-white p-2.5 rounded-xl"><Ic p={P.user} size={20}/></span><div className="flex-1 min-w-0"><p className="font-extrabold text-slate-700 truncate flex items-center gap-1.5">{c.nombre||"—"}{visitasReales>=META_LEALTAD&&<Ic p={P.star} size={14} fill="#fbbf24" className="text-amber-400"/>}</p><p className="text-xs text-slate-400 font-bold">{c.whatsapp||"sin WhatsApp"}</p></div><div className="text-right"><p className="text-2xl font-extrabold text-blue-600 leading-none">{visitasReales}</p><p className="text-[10px] font-bold text-slate-400">lavados / visitas</p></div></div>
     {misVeh.length>0&&(<div className="flex flex-wrap gap-1.5 mt-2.5">{misVeh.map(v=>{ const T=tipoOf(v.tipo); return (<span key={v.id} className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-xs font-bold text-slate-500"><Ic p={T.pth} size={12} className="text-slate-400"/><span className="font-mono">{v.placa}</span></span>); })}</div>)}
     {L.gratis.length>0 && <p className="text-xs font-extrabold text-emerald-600 mt-2.5 flex items-center gap-1"><Ic p={P.gift} size={13}/> Gratis: {L.gratis.join(", ")}</p>}
     {L.porTipo.length===0 ? <p className="text-xs text-slate-400 font-semibold mt-2.5">Aún sin lavados registrados.</p> : (
@@ -730,6 +853,19 @@ function ClienteCard({ c, vehiculos, orders, cfg, onUpd, onDel }){
         </div>))}
       </div>
     )}
+    <button onClick={()=>setHistOpen(v=>!v)} className="w-full flex items-center justify-between mt-3 pt-3 border-t-2 border-dashed border-blue-100">
+      <span className="text-xs font-extrabold text-slate-500">Historial de lavados ({hist.length})</span>
+      <span className="text-slate-400 text-sm">{histOpen?"▲":"▼"}</span>
+    </button>
+    {histOpen && (<div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
+      {hist.length===0 ? <p className="text-xs text-slate-400 font-semibold">Sin lavados registrados aún.</p> :
+        hist.map(rec=><HistorialRow key={rec.id} rec={rec} cfg={cfg} onUpdOrder={onUpdOrder}/>)}
+    </div>)}
+    {(c.visitas||0)!==visitasReales && (<div className="mt-2.5 bg-amber-50 border-2 border-amber-200 rounded-xl p-2.5 flex items-center gap-2">
+      <Ic p={P.alert} size={14} className="text-amber-500 shrink-0"/>
+      <p className="flex-1 text-[11px] font-bold text-amber-700">Visitas registradas: {c.visitas||0} · Lavados reales: {visitasReales}</p>
+      <button onClick={()=>onUpd(c.id,{visitas:visitasReales})} className="lav-press bg-amber-500 text-white text-[11px] font-extrabold px-2.5 py-1.5 rounded-lg whitespace-nowrap">Corregir</button>
+    </div>)}
     <div className="grid grid-cols-3 gap-1.5 mt-3">
       <a href={wa} target="_blank" rel="noreferrer" className="lav-press bg-emerald-50 text-emerald-600 border-2 border-emerald-100 text-xs font-extrabold py-2 rounded-xl flex items-center justify-center gap-1"><Ic p={P.msg} size={14}/> Promo</a>
       <button onClick={()=>{ setF({nombre:c.nombre||"",whatsapp:c.whatsapp||"",visitas:c.visitas||0}); setEdit(v=>!v); }} className="lav-press bg-blue-50 text-blue-600 border-2 border-blue-100 text-xs font-extrabold py-2 rounded-xl flex items-center justify-center gap-1"><Ic p={P.pen} size={14}/> Editar</button>
@@ -767,7 +903,7 @@ function Tienda({ productos, orders, ventas, onAdd, onUpd, onDel, onMove, onVend
 function ProductoCard({ p, idx, total, activos, onUpd, onDel, onMove, onVenderDirecta, onAgregarAVehiculo }){
   const [open,setOpen]=useState(false); const [modo,setModo]=useState("directa");
   const [qty,setQty]=useState(1); const [clienteNombre,setClienteNombre]=useState(""); const [ordenId,setOrdenId]=useState("");
-  const [editOpen,setEditOpen]=useState(false); const [eNombre,setENombre]=useState(p.nombre); const [ePrecio,setEPrecio]=useState(p.precio); const [eStock,setEStock]=useState(p.stock);
+  const [editOpen,setEditOpen]=useState(false); const [eNombre,setENombre]=useState(p.nombre); const [ePrecio,setEPrecio]=useState(p.precio); const [eStock,setEStock]=useState(p.stock); const [eStockMin,setEStockMin]=useState(p.stock_min);
   const [del,setDel]=useState(false);
   const bajo=(p.stock||0)<=(p.stock_min||3);
   const confirmar=()=>{
@@ -776,7 +912,7 @@ function ProductoCard({ p, idx, total, activos, onUpd, onDel, onMove, onVenderDi
     else { onVenderDirecta(p,cant,clienteNombre); }
     setOpen(false); setQty(1); setClienteNombre(""); setOrdenId("");
   };
-  const guardarEdicion=()=>{ onUpd(p.id,{nombre:(eNombre||"").trim()||p.nombre, precio:Number(ePrecio)||0, stock:Number(eStock)||0}); setEditOpen(false); };
+  const guardarEdicion=()=>{ onUpd(p.id,{nombre:(eNombre||"").trim()||p.nombre, precio:Number(ePrecio)||0, stock:Number(eStock)||0, stock_min:Number(eStockMin)||0}); setEditOpen(false); };
   return (<div className="bg-white rounded-2xl border border-blue-50 shadow-sm p-3.5 relative">
     <div className="flex items-center gap-3">
       <div className="flex flex-col -my-1">
@@ -792,7 +928,7 @@ function ProductoCard({ p, idx, total, activos, onUpd, onDel, onMove, onVenderDi
     {!open ? (
       <div className="flex items-center gap-2 mt-3">
         <button onClick={()=>setOpen(true)} disabled={(p.stock||0)<=0} className="lav-press flex-1 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold text-sm disabled:opacity-40">Vender</button>
-        <button onClick={()=>{setEditOpen(v=>!v);setENombre(p.nombre);setEPrecio(p.precio);setEStock(p.stock);}} className="lav-press px-3 py-2 rounded-xl border-2 border-slate-200 text-slate-500 font-bold text-xs">Editar</button>
+        <button onClick={()=>{setEditOpen(v=>!v);setENombre(p.nombre);setEPrecio(p.precio);setEStock(p.stock);setEStockMin(p.stock_min);}} className="lav-press px-3 py-2 rounded-xl border-2 border-slate-200 text-slate-500 font-bold text-xs">Editar</button>
       </div>
     ) : (
       <div className="mt-3 space-y-2 bg-slate-50 rounded-xl p-3 lav-pop">
@@ -823,6 +959,7 @@ function ProductoCard({ p, idx, total, activos, onUpd, onDel, onMove, onVenderDi
         <label className="block"><span className="text-[11px] font-bold text-slate-400">Precio $</span><input type="number" value={ePrecio} onChange={e=>setEPrecio(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-center outline-none focus:border-blue-500"/></label>
         <label className="block"><span className="text-[11px] font-bold text-slate-400">Stock</span><input type="number" value={eStock} onChange={e=>setEStock(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-center outline-none focus:border-blue-500"/></label>
       </div>
+      <label className="block"><span className="text-[11px] font-bold text-slate-400">Avisar "se está agotando" cuando el stock llegue a</span><input type="number" value={eStockMin} onChange={e=>setEStockMin(e.target.value)} className="w-full mt-0.5 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm font-bold text-center outline-none focus:border-blue-500"/></label>
       <div className="flex gap-2">
         <button onClick={()=>setEditOpen(false)} className="lav-press flex-1 py-2 rounded-lg border-2 border-slate-200 font-bold text-slate-500 text-xs">Cancelar</button>
         <button onClick={guardarEdicion} className="lav-press flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold text-xs">Guardar cambios</button>
@@ -883,6 +1020,10 @@ function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden, onRe
   const moverServicio=(i,dir)=>{ const j=i+dir; if(j<0||j>=cfg.servicios.length) return; const arr=[...cfg.servicios]; const t=arr[i]; arr[i]=arr[j]; arr[j]=t; updateCfg({servicios:arr}); };
   return (<div className="space-y-4">
     <Sec title="Negocio"><label className="block mb-3"><span className="text-xs font-bold text-slate-400">Nombre</span><input className={inp+" mt-1"} value={cfg.negocio} onChange={e=>updateCfg({negocio:e.target.value})}/></label><label className="block"><span className="text-xs font-bold text-slate-400">Comisión al lavador (%)</span><input className={inp+" mt-1"} type="number" value={cfg.comisionPct} onChange={e=>updateCfg({comisionPct:Number(e.target.value)||0})}/></label></Sec>
+    <Sec title="Descuento con tarjeta física">
+      <p className="text-xs text-slate-400 mb-3 font-semibold">Porcentaje de descuento para clientes con tarjeta/cupón físico. Se puede aplicar al momento de cobrar.</p>
+      <label className="block"><span className="text-xs font-bold text-slate-400">Descuento (%)</span><input type="number" className={inp+" mt-1"} value={(cfg.licencia&&cfg.licencia.descuentoPct)||0} onChange={e=>updateCfg({licencia:{...(cfg.licencia||{}),descuentoPct:Number(e.target.value)||0}})}/></label>
+    </Sec>
     <Sec title="Servicios">
       <p className="text-xs text-slate-400 mb-3 font-semibold">Elige la pestaña del tipo de vehículo para poner su precio exacto (ya no es por porcentaje). Usa las flechas para ordenar — pon arriba los más usados.</p>
       <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3">
