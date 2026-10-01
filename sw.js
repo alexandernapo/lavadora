@@ -1,4 +1,4 @@
-const CACHE = "lavadora-v2";
+const CACHE = "lavadora-v3";
 const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -8,6 +8,33 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("push", (e) => {
+  let data = { title: "Lavadora", body: "Nuevo ingreso" };
+  try { if (e.data) data = e.data.json(); } catch (err) {}
+  e.waitUntil(
+    self.registration.showNotification(data.title || "Lavadora", {
+      body: data.body || "",
+      icon: "./icon-192.png",
+      badge: "./icon-192.png",
+      vibrate: [120, 60, 120],
+      tag: "lavadora-ingreso",
+      renotify: true,
+      data: { url: "./" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) { if (c.url.includes(url) && "focus" in c) return c.focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
   );
 });
 
