@@ -769,7 +769,7 @@ function generarPDFResumen({ cfg, periodoLabel, movs }){
 }
 
 /* ====== CAJA ====== */
-function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto }){
+function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto, onResetOrders }){
   const now=new Date();
   const startToday=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
   const dow=(now.getDay()+6)%7; // lunes = 0
@@ -790,6 +790,8 @@ function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto 
   const comis={}; hoy.forEach(o=>{ comis[o.lavador]=(comis[o.lavador]||0)+totalOrden(o)*(cfg.comisionPct/100); });
   const vehiculosHoy=orders.filter(o=>Number(o.fecha||0)>=startToday).slice().sort((a,b)=>Number(a.fecha||0)-Number(b.fecha||0));
   const [vehHoyOpen,setVehHoyOpen]=useState(true);
+  const [rstOrd,setRstOrd]=useState(false); const [rstOrdPin,setRstOrdPin]=useState(""); const [rstOrdMsg,setRstOrdMsg]=useState(""); const [rstOrdOk,setRstOrdOk]=useState(false);
+  const doResetOrders=()=>{ const pd=String((cfg.licencia&&cfg.licencia.pinDueno)||"1111"); const pv=String((cfg.licencia&&cfg.licencia.pin)||"6276"); if(rstOrdPin===pd||rstOrdPin===pv){ onResetOrders&&onResetOrders(); setRstOrdOk(true); setRstOrd(false); setRstOrdPin(""); setRstOrdMsg(""); } else setRstOrdMsg("PIN incorrecto"); };
   const [monto,setMonto]=useState(""); const [motivo,setMotivo]=useState("");
   const agregar=()=>{ if(!(Number(monto)>0)) return; onAddGasto(monto,motivo); setMonto(""); setMotivo(""); };
   const [movOpen,setMovOpen]=useState(false); const [mesSel,setMesSel]=useState(new Date().toISOString().slice(0,7));
@@ -855,6 +857,22 @@ function Caja({ orders, totalOrden, cfg, gastos, ventas, onAddGasto, onDelGasto 
               </div>
             </div>); })}
         </div>)}
+    </section>
+
+    <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
+      <h2 className="font-extrabold mb-1 text-slate-700">Borrar vehículos de ejemplo</h2>
+      <p className="text-xs text-slate-400 mb-3 font-semibold">Borra todos los vehículos y cobros registrados (los de prueba). Los cobros quedarán en $0. No borra clientes ni productos. Requiere tu PIN.</p>
+      {!rstOrd ? <button onClick={()=>{setRstOrd(true);setRstOrdOk(false);}} className="lav-press w-full border-2 border-rose-200 text-rose-500 font-extrabold py-2.5 rounded-xl">Borrar vehículos y cobros</button> : (
+        <div className="space-y-2">
+          <input value={rstOrdPin} onChange={e=>{setRstOrdPin(e.target.value);setRstOrdMsg("");}} inputMode="numeric" type="password" placeholder="PIN del propietario" className="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500"/>
+          {rstOrdMsg && <p className="text-xs font-bold text-rose-500">{rstOrdMsg}</p>}
+          <div className="flex gap-2">
+            <button onClick={()=>{setRstOrd(false);setRstOrdPin("");setRstOrdMsg("");}} className="lav-press flex-1 py-2.5 rounded-xl border-2 border-slate-200 font-bold text-slate-500">Cancelar</button>
+            <button onClick={doResetOrders} className="lav-press flex-1 py-2.5 rounded-xl bg-rose-500 text-white font-extrabold">Sí, borrar todo</button>
+          </div>
+        </div>
+      )}
+      {rstOrdOk && <p className="text-xs font-extrabold text-emerald-600 mt-2 text-center">✓ Vehículos y cobros en $0. Listos para empezar de verdad.</p>}
     </section>
 
     <section className="bg-white rounded-2xl border border-blue-50 shadow-sm p-4">
