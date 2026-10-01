@@ -102,6 +102,7 @@ const P = {
   box:'<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/>',
   up:'<path d="m18 15-6-6-6 6"/>',
   down:'<path d="m6 9 6 6 6-6"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
 };
 function Ic({p, size=18, className, style, fill="none"}) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2"
@@ -317,7 +318,7 @@ function App({demoRole}={}){
     const placa=o.placa.toUpperCase().trim(), phone=(o.whatsapp||"").trim(), name=(o.cliente||"").trim();
     const order={ id:uid(), placa, tipo:o.tipo, marca:o.marca, color:o.color, cliente:name, whatsapp:phone,
       servicios:o.servicios, bahia:o.bahia, lavador:o.lavador, estado:"espera", danos:o.danos, objetos:o.objetos,
-      notas:o.notas, pago:{metodo:"Efectivo",monto:0,pagado:false}, fecha:(o.fecha?new Date(o.fecha+"T12:00:00").getTime():Date.now()) };
+      notas:o.notas, pago:{metodo:"Efectivo",monto:0,pagado:false}, fecha:((o.fecha&&o.fecha!==new Date().toISOString().slice(0,10))?new Date(o.fecha+"T12:00:00").getTime():Date.now()) };
     setOrders(p=>[order,...p]);
 
     let persona = (phone && clientes.find(c=>waNumber(c.whatsapp)&&waNumber(c.whatsapp)===waNumber(phone)))
@@ -515,7 +516,7 @@ function Recepcion({ cfg, clientes, vehiculos, tipoMult, onAdd }){
           </div>
           <Field label="Color"><input className={inp} value={f.color} onChange={e=>set("color",e.target.value)} placeholder="Plateado"/></Field>
           <div className="col-span-2"><Field label="Marca / Modelo"><input className={inp} value={f.marca} onChange={e=>set("marca",e.target.value)} placeholder="Chevrolet Sail"/></Field></div>
-          <div className="col-span-2"><Field label="Fecha de ingreso (puedes poner una anterior)"><input type="date" className={inp} value={f.fecha} onChange={e=>set("fecha",e.target.value)}/></Field></div>
+          <div className="col-span-2"><Field label="Fecha de ingreso (puedes poner una anterior)"><input type="date" className={inp} value={f.fecha} onChange={e=>set("fecha",e.target.value)}/></Field><p className="text-[11px] text-slate-400 font-semibold mt-1">Si dejas la fecha de hoy, la hora de ingreso se registra sola con el reloj del dispositivo.</p></div>
         </div>
         <span className="text-xs font-bold text-slate-400 block mt-3 mb-1.5">Tipo de vehículo</span>
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">{TIPOS.map(t=>{ const on=f.tipo===t.id;
@@ -605,6 +606,7 @@ function Card({ o, total, cfg, role, onUpd, onDel }){
         <p className="text-[11px] font-bold text-slate-400 mt-1">Paso {idx+1} de {seq.length} · <span style={{color:st.fill}}>{etLabel}</span></p>
       </div>
       <div className="flex flex-wrap gap-1 mt-2.5 text-xs font-bold">
+        <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.clock} size={11}/>{new Date(Number(o.fecha||0)).toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})}</span>
         <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg">{o.bahia}</span>
         <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg flex items-center gap-1"><Ic p={P.user} size={11}/>{o.lavador}</span>
         <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg">{money(total)}</span>
@@ -806,7 +808,7 @@ function HistorialRow({ rec, cfg, onUpdOrder }){
     <div className="flex items-center gap-2 text-sm">
       <div className="flex-1 min-w-0">
         <p className="font-bold text-slate-600 truncate">{rec.nombres.join(", ")||"—"}</p>
-        <p className="text-[11px] text-slate-400 font-semibold">{new Date(rec.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit',year:'numeric'})} · {rec.placa}{rec.pagado?" · "+rec.metodo:" · pendiente de cobro"}</p>
+        <p className="text-[11px] text-slate-400 font-semibold">{new Date(rec.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit',year:'numeric'})} · {new Date(rec.fecha).toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})} · {rec.placa}{rec.pagado?" · "+rec.metodo:" · pendiente de cobro"}</p>
       </div>
       <span className="font-extrabold text-blue-600 whitespace-nowrap">{money(rec.monto)}{rec.descuentoPct>0 && <span className="block text-[10px] font-bold text-emerald-600 text-right">cupón -{rec.descuentoPct}%</span>}</span>
       <button onClick={()=>{setOpen(v=>!v);setServSel(rec.servicios);setMonto(rec.monto);}} className="lav-press text-slate-300 hover:text-blue-500"><Ic p={P.pen} size={14}/></button>
