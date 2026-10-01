@@ -308,6 +308,12 @@ function App({demoRole}={}){
   const [licOpen,setLicOpen]=useState(false);
   const [dbErr,setDbErr]=useState("");
   const rep=(p)=>{ if(p&&p.then) p.then(r=>{ if(r&&r.error) setDbErr(r.error.message||JSON.stringify(r.error)); }).catch(e=>setDbErr(String(e))); return p; };
+  const [toasts,setToasts]=useState([]);
+  const toast=(texto)=>{ const tid=uid(); setToasts(p=>[...p,{id:tid,texto}]); setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==tid)),6000); };
+  const reproducirBeep=()=>{ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); [880,1100].forEach((freq,i)=>{ setTimeout(()=>{ const o=ctx.createOscillator(),g=ctx.createGain(); o.type="sine"; o.frequency.value=freq; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0.16,ctx.currentTime); o.start(); o.stop(ctx.currentTime+0.16); },i*190); }); }catch(e){} };
+  const [notifPerm,setNotifPerm]=useState(typeof Notification!=="undefined"?Notification.permission:"unsupported");
+  const pedirNotif=async()=>{ if(typeof Notification==="undefined") return; try{ const p=await Notification.requestPermission(); setNotifPerm(p); }catch(e){} };
+  const seenOrderIds=useRef(null); const misIngresos=useRef(new Set());
   const [orders, setOrders] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
@@ -402,6 +408,7 @@ function App({demoRole}={}){
     const order={ id:uid(), placa, tipo:o.tipo, marca:o.marca, color:o.color, cliente:name, whatsapp:phone,
       servicios:o.servicios, bahia:o.bahia, lavador:o.lavador, estado:"espera", danos:o.danos, objetos:o.objetos,
       notas:o.notas, pago:{metodo:"Efectivo",monto:0,pagado:false}, fecha:((o.fecha&&o.fecha!==new Date().toISOString().slice(0,10))?new Date(o.fecha+"T12:00:00").getTime():Date.now()) };
+    misIngresos.current.add(order.id);
     setOrders(p=>[order,...p]);
 
     let persona = (phone && clientes.find(c=>waNumber(c.whatsapp)&&waNumber(c.whatsapp)===waNumber(phone)))
@@ -429,6 +436,24 @@ function App({demoRole}={}){
     setTab("tablero");
   };
 
+  useEffect(()=>{
+    if(estado!=="ok") return; // esperar a que cargue todo antes de empezar a comparar
+    const ids=new Set(orders.map(o=>o.id));
+    if(seenOrderIds.current===null){ seenOrderIds.current=ids; return; } // primera carga real: solo grabar, no avisar
+    const nuevos=orders.filter(o=>!seenOrderIds.current.has(o.id) && !misIngresos.current.has(o.id));
+    if(nuevos.length>0 && (role==="dueno"||role==="desarrollador")){
+      nuevos.forEach(o=>{
+        const texto="🚗 Nuevo ingreso: "+o.placa+(o.cliente?" · "+o.cliente:"");
+        toast(texto); reproducirBeep();
+        if(typeof Notification!=="undefined" && Notification.permission==="granted"){
+          try{ new Notification(cfg.negocio||"Lavadora",{body:texto}); }catch(e){}
+        }
+      });
+    }
+    misIngresos.current.forEach(id=>{ if(ids.has(id)) misIngresos.current.delete(id); });
+    seenOrderIds.current=ids;
+  },[orders,role,estado]);
+
   if(estado==="cargando") return <SplashInicio negocio={cfg.negocio} />;
   if(estado==="error") return <Splash err msg="No se pudo conectar. Revisa el internet o las credenciales de Supabase." />;
 
@@ -449,6 +474,9 @@ function App({demoRole}={}){
 
   return (
     <div className="min-h-screen text-slate-800">
+      {toasts.length>0 && (<div className="fixed top-2 inset-x-0 z-50 flex flex-col items-center gap-2 px-4 pointer-events-none">
+        {toasts.map(t=>(<div key={t.id} className="lav-pop bg-blue-600 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-lg max-w-sm w-full text-center pointer-events-auto">{t.texto}</div>))}
+      </div>)}
       <header className="lav-header text-white sticky top-0 z-20 shadow-lg overflow-hidden">
         {[12,40,66,82,55].map((l,i)=>(<span key={i} className="lav-bubble" style={{left:l+"%",width:8+i*3,height:8+i*3,animationDelay:i*1.1+"s"}}/>))}
         <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center gap-3 relative">
@@ -477,7 +505,7 @@ function App({demoRole}={}){
         {T==="caja" && <Caja orders={orders} totalOrden={totalOrden} cfg={cfg} gastos={gastos} ventas={ventas} onAddGasto={addGasto} onDelGasto={delGasto} onResetOrders={resetOrders} />}
         {T==="clientes" && <Clientes clientes={clientes} vehiculos={vehiculos} orders={orders} cfg={cfg} totalOrden={totalOrden} onUpd={updCliente} onDel={delCliente} onUpdOrder={updOrder} onCrearLavado={crearLavadoManual} />}
         {T==="tienda" && <Tienda productos={productos} orders={orders} ventas={ventas} onAdd={addProducto} onUpd={updProducto} onDel={delProducto} onMove={moveProducto} onVenderDirecta={venderProducto} onAgregarAVehiculo={agregarProductoAOrden} />}
-        {T==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} clientes={clientes} vehiculos={vehiculos} orders={orders} totalOrden={totalOrden} onReset={resetDatos} />}
+        {T==="ajustes" && <Ajustes cfg={cfg} updateCfg={updateCfg} clientes={clientes} vehiculos={vehiculos} orders={orders} totalOrden={totalOrden} onReset={resetDatos} notifPerm={notifPerm} onPedirNotif={pedirNotif} />}
       </main>
       <div className="text-center text-[11px] text-slate-400 font-bold py-6">Conectado a: {SUPABASE_URL.replace("https://","").split(".")[0]} · v3</div>
       {licOpen && <LicenciaModal cfg={cfg} updateCfg={updateCfg} onClose={()=>setLicOpen(false)} />}
@@ -1217,7 +1245,7 @@ function NuevoProducto({onAdd}){
 }
 
 /* ====== AJUSTES ====== */
-function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden, onReset }){
+function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden, onReset, notifPerm, onPedirNotif }){
   const [nl,setNl]=useState(""); const [nb,setNb]=useState("");
   const [rst,setRst]=useState(false); const [rstPin,setRstPin]=useState(""); const [rstMsg,setRstMsg]=useState(""); const [rstOk,setRstOk]=useState(false);
   const inp="w-full rounded-xl border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500";
@@ -1231,6 +1259,18 @@ function Ajustes({ cfg, updateCfg, clientes, vehiculos, orders, totalOrden, onRe
   const moverServicio=(i,dir)=>{ const j=i+dir; if(j<0||j>=cfg.servicios.length) return; const arr=[...cfg.servicios]; const t=arr[i]; arr[i]=arr[j]; arr[j]=t; updateCfg({servicios:arr}); };
   return (<div className="space-y-4">
     <Sec title="Negocio"><label className="block mb-3"><span className="text-xs font-bold text-slate-400">Nombre</span><input className={inp+" mt-1"} value={cfg.negocio} onChange={e=>updateCfg({negocio:e.target.value})}/></label><label className="block"><span className="text-xs font-bold text-slate-400">Comisión al lavador (%)</span><input className={inp+" mt-1"} type="number" value={cfg.comisionPct} onChange={e=>updateCfg({comisionPct:Number(e.target.value)||0})}/></label></Sec>
+    <Sec title="Notificaciones de ingreso">
+      <p className="text-xs text-slate-400 mb-3 font-semibold">Avisa con sonido y mensaje cuando entra un vehículo nuevo (aunque lo registre un empleado desde otro celular). Funciona mientras tengas la app abierta, aunque esté en otra pestaña.</p>
+      {notifPerm==="granted" ? (
+        <p className="text-xs font-extrabold text-emerald-600 flex items-center gap-1"><Ic p={P.ok} size={14}/> Notificaciones activadas</p>
+      ) : notifPerm==="unsupported" ? (
+        <p className="text-xs font-bold text-slate-400">Tu navegador no soporta notificaciones; igual recibirás el aviso y sonido dentro de la app.</p>
+      ) : notifPerm==="denied" ? (
+        <p className="text-xs font-bold text-amber-600">Bloqueaste las notificaciones del navegador. Actívalas desde los ajustes de tu navegador/celular para recibir el aviso fuera de la app (igual funcionará el sonido dentro de la app).</p>
+      ) : (
+        <button onClick={onPedirNotif} className="lav-press w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-2.5 rounded-xl text-sm">Activar notificaciones</button>
+      )}
+    </Sec>
     <Sec title="Descuento con tarjeta física">
       <p className="text-xs text-slate-400 mb-3 font-semibold">Porcentaje de descuento para clientes con tarjeta/cupón físico. Se puede aplicar al momento de cobrar.</p>
       <label className="block"><span className="text-xs font-bold text-slate-400">Descuento (%)</span><input type="number" className={inp+" mt-1"} value={(cfg.licencia&&cfg.licencia.descuentoPct)||0} onChange={e=>updateCfg({licencia:{...(cfg.licencia||{}),descuentoPct:Number(e.target.value)||0}})}/></label>
