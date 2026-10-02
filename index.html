@@ -117,10 +117,16 @@ body{font-family:'Nunito',system-ui,sans-serif;margin:0;}
 /* Sombras de color -> brillo tipo "glow" en vez de halo claro */
 .lav-root .shadow-blue-200{ box-shadow:0 12px 30px rgba(37,99,235,.45) !important; }
 .lav-root .shadow-emerald-200{ box-shadow:0 10px 26px rgba(16,185,129,.4) !important; }
-/* Inputs/selects -> vidrio también */
+/* Inputs/selects -> vidrio brillante, con reflejo superior tipo gota */
 .lav-root input, .lav-root select, .lav-root textarea{
-  background: rgba(255,255,255,.055) !important;
+  background-color: rgba(255,255,255,.055) !important;
+  background-image: linear-gradient(180deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.02) 45%, rgba(255,255,255,0) 100%) !important;
   color:#eef2f9 !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.14) !important;
+  transition: box-shadow .2s ease, border-color .2s ease;
+}
+.lav-root input:focus, .lav-root select:focus, .lav-root textarea:focus{
+  box-shadow: 0 2px 14px rgba(59,130,246,.35), inset 0 1px 0 rgba(255,255,255,.2) !important;
 }
 .lav-root input::placeholder, .lav-root textarea::placeholder{ color:#64748b !important; }
 .lav-root option{ color:#0f172a; }
@@ -568,6 +574,23 @@ function NuevoServicio({onAdd}){
   </div>);
 }
 
+function GotasDecor({className}){
+  return (<svg className={className} viewBox="0 0 220 100" style={{pointerEvents:"none"}} xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="gotaGlass" cx="32%" cy="28%" r="75%">
+        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95"/>
+        <stop offset="35%" stopColor="#93c5fd" stopOpacity="0.75"/>
+        <stop offset="100%" stopColor="#2563eb" stopOpacity="0.45"/>
+      </radialGradient>
+    </defs>
+    <circle cx="22" cy="55" r="11" fill="url(#gotaGlass)"/>
+    <circle cx="196" cy="22" r="9" fill="url(#gotaGlass)"/>
+    <circle cx="172" cy="68" r="6.5" fill="url(#gotaGlass)"/>
+    <circle cx="46" cy="14" r="5.5" fill="url(#gotaGlass)"/>
+    <circle cx="112" cy="8" r="4" fill="url(#gotaGlass)"/>
+  </svg>);
+}
+
 /* ====== LOGIN (ROLES) ====== */
 function Login({cfg,onLogin}){
   const lic=cfg.licencia||{};
@@ -581,7 +604,7 @@ function Login({cfg,onLogin}){
   };
   return (<div className="lav-bg min-h-screen flex items-center justify-center p-6">
     <div className="bg-white rounded-3xl shadow-xl border border-blue-50 w-full max-w-sm p-6">
-      <div className="text-center mb-5"><span className="inline-flex bg-white p-1.5 rounded-2xl shadow mb-2 overflow-hidden"><img src={LOGO_IMG} alt="logo" className="w-16 h-16 rounded-xl object-cover block"/></span><h1 className="font-extrabold text-xl text-slate-800">{cfg.negocio||"Lavadora"}</h1><p className="text-sm text-slate-400 font-semibold">Ingresa tu PIN</p></div>
+      <div className="text-center mb-5 relative"><GotasDecor className="absolute left-1/2 -translate-x-1/2 -top-4 w-44 h-20"/><span className="relative inline-flex bg-white p-1.5 rounded-2xl shadow mb-2 overflow-hidden"><img src={LOGO_IMG} alt="logo" className="w-16 h-16 rounded-xl object-cover block"/></span><h1 className="font-extrabold text-xl text-slate-800">{cfg.negocio||"Lavadora"}</h1><p className="text-sm text-slate-400 font-semibold">Ingresa tu PIN</p></div>
       <input value={pin} onChange={e=>{setPin(e.target.value);setMsg("");}} onKeyDown={e=>{if(e.key==="Enter")entrar();}} inputMode="numeric" type="password" placeholder="PIN" autoFocus className="w-full text-center text-3xl font-extrabold rounded-xl border-2 border-slate-200 py-3 outline-none focus:border-blue-500"/>
       {msg&&<p className="text-xs font-bold text-rose-500 mt-2 text-center">{msg}</p>}
       <button onClick={entrar} className="lav-press mt-3 w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold py-3.5 rounded-xl">Entrar</button>
@@ -1608,7 +1631,8 @@ function SplashInicio({negocio}){
   return (<div className="lav-header min-h-screen flex flex-col items-center justify-center text-white relative overflow-hidden">
     {[15,35,55,75,88].map((l,i)=>(<span key={i} className="lav-bubble" style={{left:l+"%",width:10+i*4,height:10+i*4,animationDelay:i*0.7+"s"}}/>))}
     <div className="relative text-center splash-in">
-      <div className="inline-flex bg-white p-2 rounded-3xl shadow-lg mb-4 splash-logo overflow-hidden"><img src={LOGO_IMG} alt="logo" className="w-24 h-24 rounded-2xl object-cover block"/></div>
+      <GotasDecor className="absolute left-1/2 -translate-x-1/2 -top-6 w-56 h-24"/>
+      <div className="relative inline-flex bg-white p-2 rounded-3xl shadow-lg mb-4 splash-logo overflow-hidden"><img src={LOGO_IMG} alt="logo" className="w-24 h-24 rounded-2xl object-cover block"/></div>
       <h1 className="font-extrabold text-3xl leading-tight px-6">{negocio||"Mi Lavadora"}</h1>
       <p className="text-cyan-50 font-semibold mt-1">Lavado de vehículos</p>
       <div className="flex justify-center gap-1.5 mt-6">
